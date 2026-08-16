@@ -1,0 +1,11 @@
+rules:
+  - match: { path: ["secrets/**", "**/.env*"] }
+    route: LOCAL_ONLY
+  - match: { task: ["refactor_bulk", "summarize_files", "classify"] }
+    route: LOCAL
+    fallback: FRONTIER
+  - default: FRONTIER
+budgets:
+  frontier_daily: 500k
+workers:
+  local: { endpoint: "http://127.0.0.1:11434", models: ["qwen2.5-coder:32b"] }

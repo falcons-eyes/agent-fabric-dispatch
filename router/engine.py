@@ -7,7 +7,6 @@ First matching rule wins. Default is FRONTIER (no-op).
 import fnmatch
 import os
 from pathlib import Path
-from typing import Any
 
 import yaml
 

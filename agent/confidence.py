@@ -24,7 +24,7 @@ References:
 import random
 import re
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 

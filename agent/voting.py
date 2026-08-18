@@ -27,7 +27,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from agent.confidence import extract_core_answer, normalize_answer
+from agent.confidence import extract_core_answer
 
 OLLAMA_API_URL = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
 

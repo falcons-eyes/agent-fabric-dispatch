@@ -113,7 +113,7 @@ func defaultPolicy() *Policy {
 			{Default: "FRONTIER"},
 		},
 		Budgets: map[string]string{
-			"frontier_daily": "500k",
+			"frontier_daily": "5.00",
 		},
 		Workers: WorkerConfig{
 			Local: LocalWorker{

@@ -4,7 +4,7 @@ Each tool defines a prompt template and MCP schema.
 Inference is delegated to the caller (ollama_generate / vllm_generate).
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Callable
 
 

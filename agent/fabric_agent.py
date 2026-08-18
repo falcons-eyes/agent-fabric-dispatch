@@ -196,10 +196,21 @@ def read_file_content(path: str) -> str:
 
 
 def expand_prompt(prompt: str) -> str:
-    """Expand file references in the prompt (e.g., @file.py → file contents)."""
+    """Expand file references in the prompt (e.g., @file.py → file contents).
+
+    Also loads referenced files into the context cache for KV cache
+    optimization on subsequent prompts.
+    """
     import re
+    from agent.context_cache import get_cache
+
+    cache = get_cache()
+
     def replace_file_ref(match):
         path = match.group(1)
+        cached = cache.load_file(path, base_dir=str(PROJECT_ROOT))
+        if cached:
+            return f"\n```\n{cached.content}\n```\n"
         content = read_file_content(path)
         if content.startswith("Error:"):
             return f"[{content}]"
@@ -481,7 +492,7 @@ def run_interactive():
 
     print("fabric-agent — local-first coding agent")
     print(f"  Model: {DEFAULT_MODEL}  |  Trust: {cfg.trust}{budget_info}")
-    print(f"  Commands: /frontier  /local  /compare  /pipeline  /trust  /budget  /quit")
+    print(f"  Commands: /frontier  /local  /compare  /pipeline  /vote  /trust  /budget  /cache  /quit")
     print()
 
     total_local_tokens = 0
@@ -506,6 +517,30 @@ def run_interactive():
             set_config(ConfidenceConfig.from_preset(level))
             cfg = get_config()
             print(f"  Trust: {cfg.trust} (high={cfg.high_threshold}, low={cfg.low_threshold})")
+            continue
+
+        if user_input.startswith("/cache"):
+            from agent.context_cache import get_cache
+            cache = get_cache()
+            arg = user_input[6:].strip()
+            if arg == "clear":
+                cache.clear()
+                print("  Cache cleared.")
+            elif arg == "stats":
+                s = cache.stats()
+                print(f"  Files: {s['n_files']}, Total: {s['total_chars']} chars")
+                for p, info in s["files"].items():
+                    print(f"    {p} ({info['size']} chars)")
+            elif arg:
+                entry = cache.load_file(arg, base_dir=str(PROJECT_ROOT))
+                if entry:
+                    print(f"  Cached: {entry.path} ({entry.size} chars, {entry.hash})")
+                else:
+                    print(f"  Error: could not load {arg}")
+            else:
+                print("  /cache <file>  — load file into context cache")
+                print("  /cache stats   — show cache contents")
+                print("  /cache clear   — clear cache")
             continue
 
         if user_input == "/budget":
@@ -597,6 +632,8 @@ def main():
                         help="Trust level: conservative, balanced, aggressive, max, or 0.0-1.0")
     parser.add_argument("--vote", nargs="*", metavar="MODEL",
                         help="Multi-model vote (uses models from policy.yaml, or specify models)")
+    parser.add_argument("--fan-out", metavar="FILE",
+                        help="Run prompts from FILE in parallel (one prompt per line)")
     args = parser.parse_args()
 
     if args.model:
@@ -633,6 +670,29 @@ def main():
                   f"{result['local_steps']} local / {result['shepherded_steps']} shepherded / "
                   f"{result['frontier_steps']} frontier, ${result['cost_usd']:.4f}]",
                   file=sys.stderr)
+        return
+
+    if args.fan_out:
+        from agent.fanout import fan_out
+        prompts_file = Path(args.fan_out)
+        if not prompts_file.exists():
+            print(f"Error: file not found: {args.fan_out}", file=sys.stderr)
+            return
+        prompts = [line.strip() for line in prompts_file.read_text().splitlines()
+                   if line.strip() and not line.startswith("#")]
+        if not prompts:
+            print("No prompts found in file.", file=sys.stderr)
+            return
+        result = fan_out(prompts)
+        for r in result.results:
+            idx = r.get("task_index", "?")
+            print(f"\n--- Task {idx} [{r.get('source', '?')}] ---")
+            print(r.get("result", "")[:2000])
+        if sys.stderr.isatty():
+            d = result.to_dict()
+            print(f"\n[fan-out: {d['n_tasks']} tasks, {d['n_succeeded']} ok, "
+                  f"wall={d['wall_clock_ms']}ms, speedup={d['speedup']:.1f}x, "
+                  f"${result.total_cost:.4f}]", file=sys.stderr)
         return
 
     if args.vote is not None:

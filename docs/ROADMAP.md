@@ -47,10 +47,14 @@ Rule: **no phase starts until the previous phase's gate number exists.** Numbers
 ### Completed (cont.)
 - **Multi-model voting** — `--vote` flag and `/vote` command run the same prompt across multiple Ollama models, pick majority answer. `verify_answer()` asks multiple models to rate an answer 1-5 and takes the median. Configurable in policy.yaml under `voting:`.
 
+### Completed (cont.)
+- **KV / context sharing** — `ContextCache` structures prompts with shared file-content prefixes to maximize Ollama's KV cache hits (deterministic prefix → cached KV state reused). Integrated with `expand_prompt()` so `@file.py` references auto-populate the cache. `/cache` REPL command for stats/clear.
+
+### Completed (cont.)
+- **Session fan-out** — `fan_out()` runs multiple prompts through `run_single()` in parallel via ThreadPoolExecutor. `fan_out_models()` runs same prompt on multiple models. `fan_out_batch()` processes in GPU-friendly batches. `--fan-out` CLI flag.
+
 ### Remaining
 - Learned pre-inference router: for factual knowledge tasks where self-consistency fails (model is "confidently wrong"). Requires lightweight classifier trained on model uncertainty signals.
-- KV / context sharing across workers (LMCache); measure TTFT and cost.
-- Session fan-out via Agent SDK / headless, in the user's session context (ToS review runs in parallel).
 - **Interface gate:** only if hooks+MCP UX proves insufficient → evaluate a custom TUI forked from opencode/OpenClaude. Not before.
 
 ## First 10 days (checklist)

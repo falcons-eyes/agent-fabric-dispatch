@@ -1,0 +1,21 @@
+{
+  "name": "falcons-eyes",
+  "description": "Plugins from FalconEyes — customer-owned AI operations. Route sub-tasks to your own machines, keep the memory, spend fewer tokens.",
+  "owner": { "name": "FalconEyes", "url": "https://github.com/falcons-eyes" },
+  "plugins": [
+    {
+      "name": "agent-fabric-dispatch",
+      "displayName": "Agent Fabric Dispatch",
+      "source": "./plugin",
+      "description": "Cut Claude Code token spend by routing bulk/sensitive sub-tasks to a local model on your own machines. Hooks + MCP, no new tool to learn.",
+      "version": "0.1.0",
+      "author": { "name": "FalconEyes" },
+      "homepage": "https://github.com/falcons-eyes/agent-fabric-dispatch",
+      "repository": "https://github.com/falcons-eyes/agent-fabric-dispatch",
+      "license": "Apache-2.0",
+      "category": "productivity",
+      "keywords": ["token-savings", "local-llm", "ollama", "router", "privacy", "rate-limit"],
+      "tags": ["cost", "local", "hooks", "mcp"]
+    }
+  ]
+}

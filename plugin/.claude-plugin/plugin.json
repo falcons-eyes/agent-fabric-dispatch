@@ -1,0 +1,11 @@
+{
+  "name": "agent-fabric-dispatch",
+  "displayName": "Agent Fabric Dispatch",
+  "description": "Cut Claude Code token spend by routing bulk/sensitive sub-tasks to a local model on your own machines. Hooks + MCP, no new tool to learn. Reports tokens saved per session.",
+  "version": "0.1.0",
+  "author": { "name": "FalconEyes (falcons-eyes)", "url": "https://github.com/falcons-eyes" },
+  "homepage": "https://github.com/falcons-eyes/agent-fabric-dispatch",
+  "repository": "https://github.com/falcons-eyes/agent-fabric-dispatch",
+  "license": "Apache-2.0",
+  "keywords": ["token-savings", "local-llm", "ollama", "router", "hooks", "mcp", "privacy", "cost", "rate-limit"]
+}

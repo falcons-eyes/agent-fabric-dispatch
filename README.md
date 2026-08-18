@@ -65,11 +65,23 @@ claude
 # on exit:  "session: 14 dispatches · 9 local · 5 frontier · est. saved 1.2M tokens · sensitive egress 0"
 ```
 
+
+## Install as a Claude Code plugin
+
+```
+/plugin marketplace add falcons-eyes/agent-fabric-dispatch
+/plugin install agent-fabric-dispatch@falcons-eyes
+```
+
+The plugin lives in [`plugin/`](plugin/) and this repo doubles as its marketplace via [`.claude-plugin/marketplace.json`](.claude-plugin/marketplace.json). v0.1 ships Phase 0 (metering hooks + two skills); the router and local worker land in Phase 1.
+
 ## Repository layout
 
 ```
 agent-fabric-dispatch/
 ├── README.md
+├── .claude-plugin/marketplace.json   this repo IS the marketplace
+├── plugin/                   the installable Claude Code plugin (manifest, hooks, skills)
 ├── docs/
 │   ├── ROADMAP.md            phases, gates, acceptance tests
 │   ├── ARCHITECTURE.md       components, data flow, trust boundary

@@ -22,3 +22,6 @@ line-length = 100
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = [
+    "integration: tests against real Ollama/Claude CLI (require running services)",
+]

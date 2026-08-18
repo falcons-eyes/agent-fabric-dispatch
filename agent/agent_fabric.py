@@ -258,8 +258,8 @@ def run_single(prompt: str, force_route: str = None, use_confidence: bool = True
     from agent.confidence import Confidence, ConfidenceConfig, estimate_confidence, get_config, set_config
 
     tracker = get_tracker()
+    route = force_route or classify_task(prompt)
     expanded = expand_prompt(prompt)
-    route = force_route or classify_task(expanded)
 
     if route == "frontier":
         if not tracker.can_escalate():
@@ -283,10 +283,13 @@ def run_single(prompt: str, force_route: str = None, use_confidence: bool = True
     cfg = get_config()
 
     adjusted_trust = tracker.suggested_trust(cfg.trust)
-    if adjusted_trust != cfg.trust:
+    budget_adjusted = adjusted_trust != cfg.trust
+    if budget_adjusted:
         cfg = ConfidenceConfig.from_preset(adjusted_trust)
 
     if not use_confidence or force_route == "local" or cfg.skip_confidence:
+        if budget_adjusted and not tracker.can_escalate():
+            result["budget_blocked"] = True
         return result
 
     conf = estimate_confidence(expanded, result, ollama_generate_with_temp, cfg)

@@ -154,7 +154,8 @@ def _read_mcp_message(stream) -> str | None:
 def _write_mcp_message(data: dict):
     """Write one MCP message with Content-Length header framing."""
     body = json.dumps(data)
-    sys.stdout.write(f"Content-Length: {len(body)}\r\n\r\n{body}")
+    header = f"Content-Length: {len(body.encode('utf-8'))}\r\n\r\n"
+    sys.stdout.write(header + body)
     sys.stdout.flush()
 
 

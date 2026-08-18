@@ -74,10 +74,10 @@ Instead of post-hoc answer checking, the agent uses **self-consistency** (sample
 
 **High-confidence calibration: 100%** — every answer the system labels as "confident" is correct.
 
-The system uses a layered approach:
+The system uses a layered approach with **shepherding** (hint-based escalation):
 - **High confidence** (≥85% self-consistency): return local answer ($0.00)
-- **Medium** (50–85%): return local, flag as uncertain
-- **Low** (<50%): escalate to frontier (~$0.19)
+- **Medium** (50–85%): ask frontier for a short hint (~50 tokens, ~$0.03), re-run local with hint
+- **Low** (<50%): try shepherding first; if it fails, full frontier fallback (~$0.19)
 
 For reasoning tasks (math, code), self-consistency works well because uncertain models produce different answers across samples. For factual knowledge (MMLU), the model is "confidently wrong" — a known limitation addressed by learned routers in Phase 2.
 
@@ -124,6 +124,10 @@ python benchmarks/run_fabric_compare.py --benchmarks gsm8k,math,mmlu --limit 50
 ## Features
 
 - **Local-first dispatch** — Ollama handles all tasks by default at zero frontier cost
+- **Confidence routing** — Self-consistency + self-verification detect when local answers are uncertain
+- **Shepherding** — When uncertain, ask frontier for a hint (~$0.03) instead of full answer (~$0.19)
+- **Configurable trust** — Preset levels (conservative/balanced/aggressive/max) or 0.0–1.0 float via `--trust` flag or `policy.yaml`
+- **Step-level routing** — `--pipeline` decomposes complex tasks into steps, routes each independently (TRIM-style)
 - **Frontier fallback** — Automatically escalates to Claude when local model answers incorrectly
 - **Policy engine** — YAML rules decide which files stay local (`LOCAL_ONLY`) vs prefer local (`LOCAL`)
 - **15 benchmark runners** — GSM8K, MATH, MMLU, AIME, TruthfulQA, HumanEval, and more

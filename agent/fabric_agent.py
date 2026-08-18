@@ -275,19 +275,151 @@ def run_single(prompt: str, force_route: str = None, use_confidence: bool = True
             result["result"] = conf["best_answer"]
         return result
 
-    if conf["confidence"] == Confidence.LOW:
-        frontier_result = frontier_query(expanded)
-        frontier_result["fallback"] = True
-        frontier_result["fallback_reason"] = "low_confidence"
-        frontier_result["local_agreement"] = conf["agreement"]
-        frontier_result["local_verify_score"] = conf.get("verify_score")
-        return frontier_result
+    if conf["confidence"] == Confidence.MEDIUM:
+        guided = _try_shepherding(expanded, conf["best_answer"] or result["result"])
+        if guided:
+            guided["fallback_reason"] = "shepherding"
+            guided["local_agreement"] = conf["agreement"]
+            return guided
+        if conf["best_answer"]:
+            result["result"] = conf["best_answer"]
+        result["uncertain"] = True
+        return result
 
-    # MEDIUM confidence: return local but flag uncertainty
-    if conf["best_answer"]:
-        result["result"] = conf["best_answer"]
-    result["uncertain"] = True
-    return result
+    # LOW confidence: try shepherding first, fall back to full frontier
+    guided = _try_shepherding(expanded, conf["best_answer"] or result["result"])
+    if guided:
+        guided["fallback_reason"] = "shepherding"
+        guided["local_agreement"] = conf["agreement"]
+        return guided
+
+    frontier_result = frontier_query(expanded)
+    frontier_result["fallback"] = True
+    frontier_result["fallback_reason"] = "low_confidence"
+    frontier_result["local_agreement"] = conf["agreement"]
+    frontier_result["local_verify_score"] = conf.get("verify_score")
+    return frontier_result
+
+
+def _try_shepherding(prompt: str, local_answer: str) -> dict | None:
+    """Request a short hint from frontier, then re-run local with the hint.
+
+    Returns the guided result if it looks better than the original, else None.
+    Based on LLM Shepherding (Dong et al., 2026): 70-90% cheaper than full
+    frontier calls because we request ~50 tokens instead of ~500.
+    """
+    hint_prompt = (
+        f"A local model attempted this task but may be wrong. "
+        f"Give a brief hint (under 50 words) — the key insight, approach, "
+        f"or correction needed. Do NOT give the full answer.\n\n"
+        f"Task: {prompt[:800]}\n\n"
+        f"Local model's attempt: {local_answer[:400]}"
+    )
+
+    hint_result = frontier_query(hint_prompt, max_turns=1)
+    hint = hint_result.get("result", "").strip()
+    hint_cost = hint_result.get("cost_usd", 0)
+
+    if not hint or hint_result.get("error"):
+        return None
+
+    guided_prompt = (
+        f"{prompt}\n\n"
+        f"Hint from expert: {hint}\n\n"
+        f"Using the hint above, provide your answer."
+    )
+    guided_result = ollama_generate(guided_prompt)
+
+    if guided_result.get("error"):
+        return None
+
+    guided_result["source"] = "shepherded"
+    guided_result["hint"] = hint
+    guided_result["hint_cost_usd"] = hint_cost
+    guided_result["cost_usd"] = hint_cost
+    return guided_result
+
+
+DECOMPOSE_PROMPT = """Break this task into independent steps. Each step should be a self-contained sub-task.
+
+Task: {task}
+
+Reply with a JSON array of step objects. Each step has:
+- "step": short description of what to do
+- "type": one of "refactor", "summarize", "classify", "format", "test", "debug", "design", "review", "other"
+
+Example: [{{"step": "Add type hints to function foo", "type": "refactor"}}, {{"step": "Write unit tests for foo", "type": "test"}}]
+
+Reply with ONLY the JSON array, nothing else."""
+
+
+def decompose_task(prompt: str) -> list[dict]:
+    """Break a complex prompt into independent steps using the local model."""
+    result = ollama_generate(DECOMPOSE_PROMPT.format(task=prompt[:1500]))
+    raw = result.get("result", "").strip()
+
+    try:
+        if "```" in raw:
+            import re
+            match = re.search(r'```(?:json)?\s*(\[.+?\])\s*```', raw, re.DOTALL)
+            if match:
+                raw = match.group(1)
+        steps = json.loads(raw)
+        if isinstance(steps, list) and all(isinstance(s, dict) and "step" in s for s in steps):
+            return steps
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    return [{"step": prompt, "type": "other"}]
+
+
+def run_pipeline(prompt: str) -> dict:
+    """Decompose a complex task into steps and route each independently.
+
+    TRIM-style step-level routing: easy steps (refactor, summarize, format)
+    stay local; hard steps (debug, design, review) get frontier routing.
+    Each step runs through confidence estimation independently.
+    """
+    expanded = expand_prompt(prompt)
+    steps = decompose_task(expanded)
+
+    if len(steps) <= 1:
+        return run_single(prompt)
+
+    results = []
+    total_cost = 0.0
+    sources = []
+
+    for i, step in enumerate(steps):
+        step_prompt = step["step"]
+        if i > 0 and results:
+            prev = results[-1].get("result", "")
+            if prev:
+                step_prompt = f"Previous step result:\n{prev[:500]}\n\nNow: {step_prompt}"
+
+        step_result = run_single(step_prompt)
+        step_result["step_index"] = i
+        step_result["step_type"] = step.get("type", "other")
+        step_result["step_description"] = step["step"]
+        results.append(step_result)
+
+        total_cost += step_result.get("cost_usd", 0)
+        sources.append(step_result.get("source", "unknown"))
+
+    local_count = sum(1 for s in sources if s == "local")
+    frontier_count = sum(1 for s in sources if s == "frontier")
+    shepherded_count = sum(1 for s in sources if s == "shepherded")
+
+    return {
+        "result": results[-1].get("result", ""),
+        "steps": results,
+        "total_steps": len(steps),
+        "local_steps": local_count,
+        "frontier_steps": frontier_count,
+        "shepherded_steps": shepherded_count,
+        "cost_usd": total_cost,
+        "source": "pipeline",
+    }
 
 
 def run_compare(prompt: str) -> dict:
@@ -371,6 +503,8 @@ def main():
     parser.add_argument("prompt", nargs="?", help="Single-shot prompt (use @file.py to include files)")
     parser.add_argument("--interactive", "-i", action="store_true", help="Interactive REPL mode")
     parser.add_argument("--compare", "-c", action="store_true", help="Run on both local and frontier")
+    parser.add_argument("--pipeline", "-p", action="store_true",
+                        help="Decompose into steps and route each independently")
     parser.add_argument("--frontier", "-f", action="store_true", help="Force frontier routing")
     parser.add_argument("--local", "-l", action="store_true", help="Force local routing")
     parser.add_argument("--model", "-m", help=f"Ollama model (default: {DEFAULT_MODEL})")
@@ -402,6 +536,16 @@ def main():
         print(f"\n--- FRONTIER ({result['frontier'].get('duration_ms', 0)}ms, ${result['frontier'].get('cost_usd', 0):.4f}) ---")
         print(result["frontier"]["result"])
         print(f"\nSavings: ${result['savings_usd']:.4f} (100% if local-only)")
+        return
+
+    if args.pipeline:
+        result = run_pipeline(args.prompt)
+        print(result["result"])
+        if sys.stderr.isatty():
+            print(f"\n[pipeline: {result['total_steps']} steps, "
+                  f"{result['local_steps']} local / {result['shepherded_steps']} shepherded / "
+                  f"{result['frontier_steps']} frontier, ${result['cost_usd']:.4f}]",
+                  file=sys.stderr)
         return
 
     force_route = None

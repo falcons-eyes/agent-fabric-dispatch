@@ -32,6 +32,17 @@ Rule: **no phase starts until the previous phase's gate number exists.** Numbers
 - **Gate:** remote overhead < 15% on p50 latency; isolation test passes; dashboard renders real data.
 
 ## Phase 3 — Intelligence layer (4+ weeks)
+
+### Completed
+- **Confidence routing** — self-consistency (N samples at temperature > 0) + self-verification (AutoMix-style) + choice shuffling for multiple-choice.
+- **Configurable trust** — presets (conservative/balanced/aggressive/max) + continuous 0.0–1.0 float via `--trust` CLI flag and `~/.fabric/policy.yaml`.
+- **Shepherding** — when uncertain, ask frontier for a hint (~50 tokens, ~$0.03) instead of full answer (~$0.19). Local model re-runs with the hint. Based on LLM Shepherding (arXiv:2601.22132).
+
+### Completed (cont.)
+- **Step-level routing (TRIM-style)** — `run_pipeline()` decomposes complex tasks into steps, routes each independently through confidence estimation. `--pipeline` CLI flag.
+
+### Remaining
+- Learned pre-inference router: for factual knowledge tasks where self-consistency fails (model is "confidently wrong"). Requires lightweight classifier trained on model uncertainty signals.
 - Verification loops / voting across 3 workers; measure *effective N* (Ringelmann-style), publish "peer-grade task list".
 - KV / context sharing across workers (LMCache); measure TTFT and cost.
 - Cost-objective router v2 (minimize frontier share under quality constraint).

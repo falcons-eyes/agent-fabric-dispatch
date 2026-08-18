@@ -19,11 +19,20 @@ User Prompt
     ▼
 Ollama (local model) ──── always runs first, $0.00
     │
-    ├── correct? ──► done (no frontier cost)
+    ▼
+Confidence check (self-consistency + self-verify)
     │
-    └── wrong? ──► claude -p (frontier fallback, ~$0.19/call)
-                       │
-                       └──► result
+    ├── HIGH ──► return local answer ($0.00)
+    │
+    ├── MEDIUM ──► Shepherding: frontier hint (~$0.03)
+    │                 │
+    │                 └──► re-run local with hint ──► done
+    │
+    └── LOW ──► try shepherding first
+                  │
+                  ├── hint works ──► done (~$0.03)
+                  │
+                  └── hint fails ──► full frontier fallback (~$0.19)
 ```
 
 ### Why MCP Dispatch Failed
@@ -51,8 +60,12 @@ doing nothing.
 1. Task arrives (prompt or file reference)
 2. `classify_task()` routes: keyword match → local or frontier
 3. Local path: `ollama_generate()` via HTTP API (`/api/generate`, `stream: false`)
-4. If local fails quality check: `frontier_query()` via `claude -p --output-format json`
-5. Metering records: routing decision, tokens, cost, timing
+4. Confidence estimation: self-consistency (N samples) + self-verification (AutoMix)
+5. HIGH confidence: return local answer directly
+6. MEDIUM/LOW confidence: `_try_shepherding()` — ask frontier for a hint (~50 tokens),
+   re-run local with the hint. ~85% cheaper than full frontier calls.
+7. If shepherding fails on LOW: full `frontier_query()` via `claude -p --output-format json`
+8. Metering records: routing decision, tokens, cost, timing
 
 ## Trust Boundary
 

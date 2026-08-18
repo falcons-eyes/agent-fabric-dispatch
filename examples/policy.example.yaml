@@ -8,4 +8,16 @@ rules:
 budgets:
   frontier_daily: 500k
 workers:
-  local: { endpoint: "http://127.0.0.1:11434", models: ["qwen2.5-coder:32b"] }
+  local:
+    endpoint: "http://127.0.0.1:11434"
+    models:
+      # Tier 1 — Best local coders (24GB GPU / 32GB+ RAM)
+      - "qwen3-coder:30b"            # Qwen3-Coder MoE, 18GB Q4_K_M, 256K ctx, Apache 2.0
+      - "qwen3.6:27b"                # Qwen 3.6 dense, 77.2% SWE-bench, 256K ctx, Apache 2.0
+      - "devstral-small:24b"         # Devstral Small 2, 68% SWE-bench, 256K ctx, Apache 2.0
+      - "gemma4:27b-a4b"             # Gemma 4 MoE, 104 tok/s on Apple Silicon, Apache 2.0
+      # Tier 2 — Mid-range (48GB+ VRAM)
+      - "devstral:123b"              # Devstral 2, 72.2% SWE-bench, 256K ctx
+      # Tier 3 — Enterprise (multi-GPU / cluster)
+      - "deepseek-v4-flash:284b"     # DeepSeek V4-Flash, ~80% SWE-bench, 1M ctx, MIT
+      - "minimax-m3:428b"            # MiniMax M3, 1M ctx sparse attention

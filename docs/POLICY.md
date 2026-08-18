@@ -3,7 +3,7 @@
 Rules are evaluated top-down; first match wins; default = FRONTIER.
 
 ```yaml
-# ~/.falcon/policy.yaml
+# ~/.fabric/policy.yaml
 rules:
   - match: { path: ["secrets/**", "**/.env*"] }        # sensitivity
     route: LOCAL_ONLY          # never FRONTIER, never CLOUD_WORKER
@@ -20,7 +20,13 @@ rules:
 budgets:
   frontier_daily: 500k        # tokens
 workers:
-  local:  { endpoint: "http://127.0.0.1:11434", models: ["qwen2.5-coder:32b"] }
+  local:
+    endpoint: "http://127.0.0.1:11434"
+    models:
+      - "qwen3-coder:30b"         # default recommendation
+      - "qwen3.6:27b"
+      - "devstral-small:24b"
+      - "gemma4:27b-a4b"
   cloud:  { fabric_service: "worker.aws-node-1", zone: "james" }    # Phase 2
 ```
 

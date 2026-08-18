@@ -1,0 +1,24 @@
+[project]
+name = "agent-fabric-dispatch"
+version = "0.1.0"
+description = "Policy-driven task router for Claude Code — dispatch grunt work to local models"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+dependencies = [
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.4",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

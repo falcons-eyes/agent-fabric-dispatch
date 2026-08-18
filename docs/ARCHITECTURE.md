@@ -47,13 +47,13 @@ doing nothing.
 
 | Component | Language | Responsibility |
 |---|---|---|
-| `agent/fabric_agent.py` | Python | Local-first agent: Ollama default, `claude -p` escalation |
+| `agent/agent_fabric.py` | Python | Local-first agent: Ollama default, `claude -p` escalation |
 | `router/engine.py` | Python | Policy evaluation (deterministic rules) |
 | `worker/server.py` | Python | MCP server wrapping Ollama (retained for integration) |
 | `hooks/` | Python | Claude Code hook scripts (PreToolUse, PostToolUse, Stop) |
 | `metering/` | Python | JSONL recorder, session summary, savings estimator |
 | `fabric` CLI | Go | Command-line interface, session management |
-| `benchmarks/` | Python | Benchmark suite (15 runners) + fabric-agent comparison |
+| `benchmarks/` | Python | Benchmark suite (15 runners) + agent-fabric comparison |
 
 ## Data Flow
 

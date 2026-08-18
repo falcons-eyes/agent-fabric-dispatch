@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from agent.fabric_agent import ollama_generate
+from agent.agent_fabric import ollama_generate
 
 FIXTURES = [
     {

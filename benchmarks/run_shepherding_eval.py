@@ -27,7 +27,7 @@ from agent.confidence import (
     estimate_confidence,
     set_config,
 )
-from agent.fabric_agent import (
+from agent.agent_fabric import (
     _try_shepherding,
     frontier_query,
     ollama_generate,

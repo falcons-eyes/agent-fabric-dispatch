@@ -1,8 +1,9 @@
 """Tests for MCP server protocol compliance."""
 
+import io
 import json
 import pytest
-from worker.server import handle_mcp_request
+from worker.server import handle_mcp_request, _read_mcp_message, _write_mcp_message
 
 
 class TestMCPInitialize:
@@ -156,3 +157,46 @@ class TestMCPResponseWrapping:
         })
         assert "_error" in result
         # This would go under response["error"] in run_mcp_server
+
+
+class TestMCPTransportFraming:
+    """Test Content-Length header framing for stdio transport."""
+
+    def test_read_message(self):
+        body = '{"jsonrpc":"2.0","id":1,"method":"ping"}'
+        raw = f"Content-Length: {len(body)}\r\n\r\n{body}"
+        stream = io.StringIO(raw)
+        msg = _read_mcp_message(stream)
+        assert msg == body
+
+    def test_read_message_eof(self):
+        stream = io.StringIO("")
+        msg = _read_mcp_message(stream)
+        assert msg is None
+
+    def test_read_message_no_content_length(self):
+        stream = io.StringIO("\r\n")
+        msg = _read_mcp_message(stream)
+        assert msg is None
+
+    def test_read_multiple_headers(self):
+        body = '{"test":true}'
+        raw = f"Content-Length: {len(body)}\r\nContent-Type: application/json\r\n\r\n{body}"
+        stream = io.StringIO(raw)
+        msg = _read_mcp_message(stream)
+        assert msg == body
+
+    def test_roundtrip(self):
+        import sys
+        body = {"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2024-11-05"}}
+        buf = io.StringIO()
+        old_stdout = sys.stdout
+        sys.stdout = buf
+        try:
+            _write_mcp_message(body)
+        finally:
+            sys.stdout = old_stdout
+        buf.seek(0)
+        msg = _read_mcp_message(buf)
+        assert msg is not None
+        assert json.loads(msg) == body

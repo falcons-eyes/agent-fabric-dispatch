@@ -13,7 +13,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agent.confidence import Confidence, ConfidenceConfig, set_config
-from agent.fabric_agent import _try_shepherding, run_single
+from agent.agent_fabric import _try_shepherding, run_single
 
 
 def _mock_frontier(hint_text="Try using the quadratic formula.", cost=0.03):
@@ -40,8 +40,8 @@ def _mock_ollama(answer="42"):
 
 class TestTryShepherding:
     def test_returns_guided_result(self):
-        with patch("agent.fabric_agent.frontier_query", _mock_frontier("Use chain rule.")):
-            with patch("agent.fabric_agent.ollama_generate", _mock_ollama("derivative is 2x")):
+        with patch("agent.agent_fabric.frontier_query", _mock_frontier("Use chain rule.")):
+            with patch("agent.agent_fabric.ollama_generate", _mock_ollama("derivative is 2x")):
                 result = _try_shepherding("differentiate x^2", "x squared")
         assert result is not None
         assert result["source"] == "shepherded"
@@ -51,20 +51,20 @@ class TestTryShepherding:
         assert result["cost_usd"] == 0.03
 
     def test_returns_none_on_frontier_error(self):
-        with patch("agent.fabric_agent.frontier_query", _mock_frontier_error()):
+        with patch("agent.agent_fabric.frontier_query", _mock_frontier_error()):
             result = _try_shepherding("test prompt", "test answer")
         assert result is None
 
     def test_returns_none_on_empty_hint(self):
-        with patch("agent.fabric_agent.frontier_query", _mock_frontier("")):
+        with patch("agent.agent_fabric.frontier_query", _mock_frontier("")):
             result = _try_shepherding("test prompt", "test answer")
         assert result is None
 
     def test_returns_none_on_local_error(self):
         def bad_ollama(prompt, model=None):
             return {"result": "", "error": "connection refused", "cost_usd": 0}
-        with patch("agent.fabric_agent.frontier_query", _mock_frontier("hint")):
-            with patch("agent.fabric_agent.ollama_generate", bad_ollama):
+        with patch("agent.agent_fabric.frontier_query", _mock_frontier("hint")):
+            with patch("agent.agent_fabric.ollama_generate", bad_ollama):
                 result = _try_shepherding("test", "answer")
         assert result is None
 
@@ -77,8 +77,8 @@ class TestTryShepherding:
             captured["prompt"] = prompt
             return {"result": "hint", "cost_usd": 0.03, "source": "frontier"}
 
-        with patch("agent.fabric_agent.frontier_query", capturing_frontier):
-            with patch("agent.fabric_agent.ollama_generate", _mock_ollama()):
+        with patch("agent.agent_fabric.frontier_query", capturing_frontier):
+            with patch("agent.agent_fabric.ollama_generate", _mock_ollama()):
                 _try_shepherding(long_prompt, long_answer)
 
         assert len(captured["prompt"]) < len(long_prompt) + len(long_answer)
@@ -90,8 +90,8 @@ class TestTryShepherding:
             captured["prompt"] = prompt
             return {"result": "guided answer", "cost_usd": 0.0, "source": "local"}
 
-        with patch("agent.fabric_agent.frontier_query", _mock_frontier("Use modular arithmetic.")):
-            with patch("agent.fabric_agent.ollama_generate", capturing_ollama):
+        with patch("agent.agent_fabric.frontier_query", _mock_frontier("Use modular arithmetic.")):
+            with patch("agent.agent_fabric.ollama_generate", capturing_ollama):
                 _try_shepherding("compute 17 mod 5", "wrong answer")
 
         assert "Use modular arithmetic." in captured["prompt"]
@@ -113,10 +113,10 @@ class TestShepherdingIntegration:
             call_idx[0] += 1
             return {"result": r, "cost_usd": 0.0, "source": "local"}
 
-        with patch("agent.fabric_agent.ollama_generate", _mock_ollama("original")):
-            with patch("agent.fabric_agent.ollama_generate_with_temp", mock_gen_temp):
-                with patch("agent.fabric_agent.frontier_query", _mock_frontier("hint")):
-                    with patch("agent.fabric_agent.classify_task", return_value="local"):
+        with patch("agent.agent_fabric.ollama_generate", _mock_ollama("original")):
+            with patch("agent.agent_fabric.ollama_generate_with_temp", mock_gen_temp):
+                with patch("agent.agent_fabric.frontier_query", _mock_frontier("hint")):
+                    with patch("agent.agent_fabric.classify_task", return_value="local"):
                         result = run_single("test prompt")
 
         assert result["source"] == "shepherded"
@@ -131,10 +131,10 @@ class TestShepherdingIntegration:
             call_idx[0] += 1
             return {"result": r, "cost_usd": 0.0, "source": "local"}
 
-        with patch("agent.fabric_agent.ollama_generate", _mock_ollama("original")):
-            with patch("agent.fabric_agent.ollama_generate_with_temp", mock_gen_temp):
-                with patch("agent.fabric_agent.frontier_query", _mock_frontier("useful hint")):
-                    with patch("agent.fabric_agent.classify_task", return_value="local"):
+        with patch("agent.agent_fabric.ollama_generate", _mock_ollama("original")):
+            with patch("agent.agent_fabric.ollama_generate_with_temp", mock_gen_temp):
+                with patch("agent.agent_fabric.frontier_query", _mock_frontier("useful hint")):
+                    with patch("agent.agent_fabric.classify_task", return_value="local"):
                         result = run_single("test prompt")
 
         assert result["source"] == "shepherded"
@@ -159,10 +159,10 @@ class TestShepherdingIntegration:
             # Second call: full frontier fallback
             return {"result": "frontier answer", "cost_usd": 0.19, "source": "frontier"}
 
-        with patch("agent.fabric_agent.ollama_generate", _mock_ollama("original")):
-            with patch("agent.fabric_agent.ollama_generate_with_temp", mock_gen_temp):
-                with patch("agent.fabric_agent.frontier_query", mock_frontier):
-                    with patch("agent.fabric_agent.classify_task", return_value="local"):
+        with patch("agent.agent_fabric.ollama_generate", _mock_ollama("original")):
+            with patch("agent.agent_fabric.ollama_generate_with_temp", mock_gen_temp):
+                with patch("agent.agent_fabric.frontier_query", mock_frontier):
+                    with patch("agent.agent_fabric.classify_task", return_value="local"):
                         result = run_single("test prompt")
 
         assert result["source"] == "frontier"
@@ -180,10 +180,10 @@ class TestShepherdingIntegration:
             frontier_called[0] = True
             return original_frontier(prompt, max_turns)
 
-        with patch("agent.fabric_agent.ollama_generate", _mock_ollama("42")):
-            with patch("agent.fabric_agent.ollama_generate_with_temp", mock_gen_temp):
-                with patch("agent.fabric_agent.frontier_query", tracking_frontier):
-                    with patch("agent.fabric_agent.classify_task", return_value="local"):
+        with patch("agent.agent_fabric.ollama_generate", _mock_ollama("42")):
+            with patch("agent.agent_fabric.ollama_generate_with_temp", mock_gen_temp):
+                with patch("agent.agent_fabric.frontier_query", tracking_frontier):
+                    with patch("agent.agent_fabric.classify_task", return_value="local"):
                         result = run_single("test prompt")
 
         assert result["source"] == "local"
@@ -202,10 +202,10 @@ class TestShepherdingIntegration:
         )
         set_config(cfg)
 
-        with patch("agent.fabric_agent.ollama_generate", _mock_ollama("42")):
-            with patch("agent.fabric_agent.ollama_generate_with_temp", mock_gen_temp):
-                with patch("agent.fabric_agent.frontier_query", _mock_frontier("hint", 0.03)):
-                    with patch("agent.fabric_agent.classify_task", return_value="local"):
+        with patch("agent.agent_fabric.ollama_generate", _mock_ollama("42")):
+            with patch("agent.agent_fabric.ollama_generate_with_temp", mock_gen_temp):
+                with patch("agent.agent_fabric.frontier_query", _mock_frontier("hint", 0.03)):
+                    with patch("agent.agent_fabric.classify_task", return_value="local"):
                         result = run_single("test", use_confidence=True)
 
         assert result["cost_usd"] == 0.03

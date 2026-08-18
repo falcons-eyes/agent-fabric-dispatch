@@ -47,8 +47,15 @@ class ContextCache:
         if base_dir and not p.is_absolute():
             p = Path(base_dir) / p
 
+        try:
+            p = p.resolve()
+        except OSError:
+            return None
+
         if not p.exists():
             return None
+
+        key = str(p)
 
         try:
             content = p.read_text()
@@ -57,11 +64,11 @@ class ContextCache:
 
         h = hashlib.md5(content.encode()).hexdigest()[:12]
 
-        if path in self.files and self.files[path].hash == h:
-            return self.files[path]
+        if key in self.files and self.files[key].hash == h:
+            return self.files[key]
 
-        cached = CachedFile(path=path, content=content, hash=h, size=len(content))
-        self.files[path] = cached
+        cached = CachedFile(path=key, content=content, hash=h, size=len(content))
+        self.files[key] = cached
         return cached
 
     def invalidate(self, path: str):

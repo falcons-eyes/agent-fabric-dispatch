@@ -131,7 +131,7 @@ class TestBudgetIntegration:
         from unittest.mock import patch
         from agent.budget import BudgetConfig, BudgetTracker, set_tracker
         from agent.confidence import ConfidenceConfig, set_config
-        from agent.fabric_agent import run_single
+        from agent.agent_fabric import run_single
 
         set_config(ConfidenceConfig.from_preset("max"))
         cfg = BudgetConfig(session_usd=0.01)
@@ -148,9 +148,9 @@ class TestBudgetIntegration:
             frontier_called[0] = True
             return {"result": "frontier", "cost_usd": 0.19, "source": "frontier"}
 
-        with patch("agent.fabric_agent.ollama_generate", mock_ollama):
-            with patch("agent.fabric_agent.frontier_query", mock_frontier):
-                with patch("agent.fabric_agent.classify_task", return_value="frontier"):
+        with patch("agent.agent_fabric.ollama_generate", mock_ollama):
+            with patch("agent.agent_fabric.frontier_query", mock_frontier):
+                with patch("agent.agent_fabric.classify_task", return_value="frontier"):
                     result = run_single("test")
 
         assert result.get("budget_blocked") is True

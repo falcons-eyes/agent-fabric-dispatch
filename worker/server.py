@@ -129,33 +129,63 @@ def handle_mcp_request(request: dict) -> dict | None:
     return {"_error": {"code": -32601, "message": f"Unknown method: {method}"}}
 
 
+def _read_mcp_message(stream) -> str | None:
+    """Read one MCP message using Content-Length header framing (LSP-style)."""
+    content_length = None
+    while True:
+        header_line = stream.readline()
+        if not header_line:
+            return None
+        header_line = header_line.strip()
+        if not header_line:
+            break
+        if header_line.lower().startswith("content-length:"):
+            content_length = int(header_line.split(":", 1)[1].strip())
+
+    if content_length is None:
+        return None
+
+    body = stream.read(content_length)
+    if len(body) < content_length:
+        return None
+    return body
+
+
+def _write_mcp_message(data: dict):
+    """Write one MCP message with Content-Length header framing."""
+    body = json.dumps(data)
+    sys.stdout.write(f"Content-Length: {len(body)}\r\n\r\n{body}")
+    sys.stdout.flush()
+
+
 def run_mcp_server():
-    """Run as an MCP stdio server (JSON-RPC 2.0 over stdin/stdout)."""
-    for line in sys.stdin:
-        line = line.strip()
-        if not line:
-            continue
+    """Run as an MCP stdio server (JSON-RPC 2.0 over stdin/stdout).
+
+    Uses Content-Length header framing per the MCP stdio transport spec.
+    """
+    while True:
+        raw = _read_mcp_message(sys.stdin)
+        if raw is None:
+            break
 
         try:
-            request = json.loads(line)
+            request = json.loads(raw)
         except json.JSONDecodeError:
             continue
 
         result = handle_mcp_request(request)
 
-        # Notifications produce no response
         if result is None:
             continue
 
         response = {"jsonrpc": "2.0", "id": request.get("id")}
 
-        # Check for error responses (marked with _error key)
         if "_error" in result:
             response["error"] = result["_error"]
         else:
             response["result"] = result
 
-        print(json.dumps(response), flush=True)
+        _write_mcp_message(response)
 
 
 def run_standalone():

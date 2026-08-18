@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Benchmark comparison: local-only vs fabric-agent (local + frontier fallback).
+"""Benchmark comparison: local-only vs agent-fabric (local + frontier fallback).
 
 For each question:
   1. Try local model (Ollama) first
@@ -65,7 +65,11 @@ def frontier_generate(prompt: str) -> dict:
     if result.returncode != 0:
         return {"text": "", "output_tokens": 0, "duration_ms": round(dt * 1000), "cost": 0.0, "error": True}
 
-    data = json.loads(result.stdout)
+    try:
+        data = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return {"text": result.stdout.strip(), "output_tokens": 0, "duration_ms": round(dt * 1000), "cost": 0.0, "error": True}
+
     return {
         "text": data.get("result", ""),
         "output_tokens": data.get("usage", {}).get("output_tokens", 0),
@@ -249,7 +253,7 @@ def run_benchmark_compare(name: str, limit: int) -> dict:
             frontier_cost = frontier_resp.get("cost", 0)
             frontier_used = True
 
-        # Final answer for fabric-agent
+        # Final answer for agent-fabric
         fabric_correct = local_correct or frontier_correct
 
         status = "LOCAL ✓" if local_correct else ("FRONTIER ✓" if frontier_correct else "BOTH ✗")
@@ -293,7 +297,7 @@ def run_benchmark_compare(name: str, limit: int) -> dict:
             "tokens": total_local_tokens,
             "cost": 0.0,
         },
-        "fabric_agent": {
+        "agent_fabric": {
             "correct": fabric_correct,
             "accuracy": fabric_correct / total if total else 0,
             "frontier_calls": frontier_calls,
@@ -315,7 +319,7 @@ def main():
     names = [n.strip() for n in args.benchmarks.split(",")]
     all_results = {}
 
-    print(f"\nFabric Agent Benchmark Comparison")
+    print(f"\nAgent Fabric Benchmark Comparison")
     print(f"  Local model: {DEFAULT_MODEL}")
     print(f"  Frontier: claude -p")
     print(f"  Benchmarks: {', '.join(names)}")
@@ -346,7 +350,7 @@ def main():
 
     for name, r in all_results.items():
         lo = r["local_only"]
-        fa = r["fabric_agent"]
+        fa = r["agent_fabric"]
         delta = fa["accuracy"] - lo["accuracy"]
         print(f"  {name:<12} {lo['accuracy']:>9.1%} {fa['accuracy']:>10.1%} {delta:>+5.1%} ${fa['cost']:>8.4f} {fa['frontier_calls']:>7} {fa['frontier_wins']:>6}")
 

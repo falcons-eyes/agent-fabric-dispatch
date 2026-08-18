@@ -44,8 +44,8 @@ class TestFanOut:
             return {"result": f"answer for: {prompt[:20]}",
                     "cost_usd": 0, "source": "local", "duration_ms": 10}
 
-        with patch("agent.fabric_agent.ollama_generate", mock_ollama):
-            with patch("agent.fabric_agent.classify_task", return_value="local"):
+        with patch("agent.agent_fabric.ollama_generate", mock_ollama):
+            with patch("agent.agent_fabric.classify_task", return_value="local"):
                 result = fan_out(["task 1", "task 2", "task 3"])
 
         assert result.n_tasks == 3
@@ -57,8 +57,8 @@ class TestFanOut:
         def mock_ollama(prompt, model=None):
             return {"result": prompt, "cost_usd": 0, "source": "local"}
 
-        with patch("agent.fabric_agent.ollama_generate", mock_ollama):
-            with patch("agent.fabric_agent.classify_task", return_value="local"):
+        with patch("agent.agent_fabric.ollama_generate", mock_ollama):
+            with patch("agent.agent_fabric.classify_task", return_value="local"):
                 result = fan_out(["first", "second", "third"])
 
         indices = [r["task_index"] for r in result.results]
@@ -73,8 +73,8 @@ class TestFanOut:
                 return {"result": "", "error": "timeout", "cost_usd": 0, "source": "local"}
             return {"result": "ok", "cost_usd": 0, "source": "local"}
 
-        with patch("agent.fabric_agent.ollama_generate", mock_ollama):
-            with patch("agent.fabric_agent.classify_task", return_value="local"):
+        with patch("agent.agent_fabric.ollama_generate", mock_ollama):
+            with patch("agent.agent_fabric.classify_task", return_value="local"):
                 result = fan_out(["a", "b", "c"], force_route="local")
 
         assert result.n_tasks == 3
@@ -84,8 +84,8 @@ class TestFanOut:
             return {"result": "ok", "cost_usd": 0.0, "source": "local",
                     "duration_ms": 50}
 
-        with patch("agent.fabric_agent.ollama_generate", mock_ollama):
-            with patch("agent.fabric_agent.classify_task", return_value="local"):
+        with patch("agent.agent_fabric.ollama_generate", mock_ollama):
+            with patch("agent.agent_fabric.classify_task", return_value="local"):
                 result = fan_out(["a", "b"])
 
         assert result.total_cost == 0.0
@@ -95,8 +95,8 @@ class TestFanOut:
         def mock_ollama(prompt, model=None):
             return {"result": "ok", "cost_usd": 0.0, "source": "local"}
 
-        with patch("agent.fabric_agent.ollama_generate", mock_ollama):
-            with patch("agent.fabric_agent.classify_task", return_value="local"):
+        with patch("agent.agent_fabric.ollama_generate", mock_ollama):
+            with patch("agent.agent_fabric.classify_task", return_value="local"):
                 result = fan_out(["a", "b", "c"])
 
         assert result.sources.get("local", 0) == 3
@@ -111,7 +111,7 @@ class TestFanOutModels:
             return {"result": f"from {model}", "model": model,
                     "cost_usd": 0, "source": "local", "duration_ms": 10}
 
-        with patch("agent.fabric_agent.ollama_generate", mock_ollama):
+        with patch("agent.agent_fabric.ollama_generate", mock_ollama):
             result = fan_out_models("test prompt",
                                     ["model-a", "model-b", "model-c"])
 
@@ -138,8 +138,8 @@ class TestFanOutBatch:
             return {"result": f"answer {call_count[0]}",
                     "cost_usd": 0, "source": "local", "duration_ms": 5}
 
-        with patch("agent.fabric_agent.ollama_generate", mock_ollama):
-            with patch("agent.fabric_agent.classify_task", return_value="local"):
+        with patch("agent.agent_fabric.ollama_generate", mock_ollama):
+            with patch("agent.agent_fabric.classify_task", return_value="local"):
                 result = fan_out_batch(
                     ["a", "b", "c", "d", "e"], batch_size=2)
 
@@ -151,8 +151,8 @@ class TestFanOutBatch:
         def mock_ollama(prompt, model=None):
             return {"result": "ok", "cost_usd": 0, "source": "local"}
 
-        with patch("agent.fabric_agent.ollama_generate", mock_ollama):
-            with patch("agent.fabric_agent.classify_task", return_value="local"):
+        with patch("agent.agent_fabric.ollama_generate", mock_ollama):
+            with patch("agent.agent_fabric.classify_task", return_value="local"):
                 result = fan_out_batch(["a", "b", "c", "d"], batch_size=2)
 
         indices = sorted(r["task_index"] for r in result.results)

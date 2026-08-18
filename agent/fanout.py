@@ -57,7 +57,7 @@ def fan_out(prompts: list[str], max_workers: int = 4,
 
     Each task gets independent confidence estimation and routing.
     """
-    from agent.fabric_agent import run_single
+    from agent.agent_fabric import run_single
 
     result = FanOutResult(n_tasks=len(prompts))
     t0 = time.time()
@@ -101,7 +101,7 @@ def fan_out_models(prompt: str, models: list[str],
     Unlike voting (which picks majority), this returns all results
     for comparison or aggregation.
     """
-    from agent.fabric_agent import ollama_generate
+    from agent.agent_fabric import ollama_generate
 
     result = FanOutResult(n_tasks=len(models))
     t0 = time.time()

@@ -33,7 +33,7 @@ Tested across 405 questions on 5 benchmarks. Local model: `qwen3-coder:30b` via 
 
 ### Local-First + Frontier Fallback
 
-| Benchmark | N | Local-only | Fabric Agent | Improvement | Frontier Calls | Cost |
+| Benchmark | N | Local-only | Agent Fabric | Improvement | Frontier Calls | Cost |
 |-----------|--:|----------:|-------------:|:-----------:|---------------:|-----:|
 | GSM8K | 100 | 97.0% | **100%** | +3.0% | 3 | $0.58 |
 | MATH | 50 | 86.0% | **88.0%** | +2.0% | 7 | $1.33 |
@@ -47,7 +47,7 @@ Tested across 405 questions on 5 benchmarks. Local model: `qwen3-coder:30b` via 
 | Strategy | Accuracy | Cost | Cost/Question |
 |----------|:--------:|-----:|--------------:|
 | Local-only (Ollama) | 78.8% | $0.00 | $0.000 |
-| **Fabric Agent** (local + fallback) | **96.0%** | **$16.21** | **$0.040** |
+| **Agent Fabric** (local + fallback) | **96.0%** | **$16.21** | **$0.040** |
 | Frontier-only (estimated) | ~97% | ~$76.95 | $0.190 |
 
 > **79% cost reduction** vs frontier-only, with 96.0% accuracy.
@@ -113,8 +113,8 @@ cd agent-fabric-dispatch
 pip install -e .
 
 # 3. Run the agent (local-first, frontier fallback)
-python agent/fabric_agent.py "summarize @router/engine.py"
-python agent/fabric_agent.py --interactive
+python agent/agent_fabric.py "summarize @router/engine.py"
+python agent/agent_fabric.py --interactive
 
 # 4. Run benchmarks
 pip install datasets

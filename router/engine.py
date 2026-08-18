@@ -141,13 +141,13 @@ def _match_paths(patterns: list[str], paths: list[str], cwd: str = "") -> bool:
 
 
 def _budget_exceeded(budget_name: str, budgets: dict) -> bool:
-    """Check if a named budget has been exceeded.
-
-    TODO: Phase 1 — read from metering.jsonl to check actual token usage
-    against the budget limit.
-    """
-    # For now, budgets are not enforced (always returns False)
-    return False
+    """Check if a named budget has been exceeded."""
+    try:
+        from agent.budget import get_tracker
+        tracker = get_tracker()
+        return not tracker.can_escalate()
+    except ImportError:
+        return False
 
 
 def _worker_available(worker_config: dict) -> bool:

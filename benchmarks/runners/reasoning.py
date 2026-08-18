@@ -6,6 +6,7 @@ HLE: Humanity's Last Exam — expert-level MCQ + short-answer.
 Note: ARC-AGI requires custom grid handling and is listed as infrastructure-heavy.
 """
 
+import random
 import re
 from datasets import load_dataset
 from tqdm import tqdm
@@ -59,21 +60,32 @@ def run_gpqa(model: str, generate_fn, limit: int = 0) -> BenchmarkResult:
     correct = 0
     total = 0
 
+    rng = random.Random(42)
+    letters = ["A", "B", "C", "D"]
+
     for item in tqdm(ds, desc="GPQA", unit="q"):
+        choices = [
+            item["Correct Answer"],
+            item["Incorrect Answer 1"],
+            item["Incorrect Answer 2"],
+            item["Incorrect Answer 3"],
+        ]
+        indices = list(range(4))
+        rng.shuffle(indices)
+        correct_pos = indices.index(0)
+
         prompt = GPQA_PROMPT.format(
             question=item["Question"],
-            choice_a=item["Correct Answer"],
-            choice_b=item["Incorrect Answer 1"],
-            choice_c=item["Incorrect Answer 2"],
-            choice_d=item["Incorrect Answer 3"],
+            choice_a=choices[indices[0]],
+            choice_b=choices[indices[1]],
+            choice_c=choices[indices[2]],
+            choice_d=choices[indices[3]],
         )
 
         response = generate_fn(prompt)
         predicted = _extract_letter(response)
 
-        # In GPQA Diamond, the correct answer is always mapped to position A
-        # (since we put "Correct Answer" as choice A)
-        if predicted == "A":
+        if predicted == letters[correct_pos]:
             correct += 1
         total += 1
 

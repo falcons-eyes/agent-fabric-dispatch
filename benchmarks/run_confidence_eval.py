@@ -22,7 +22,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agent.confidence import Confidence, estimate_confidence
-from agent.fabric_agent import (
+from agent.agent_fabric import (
     frontier_query,
     ollama_generate,
     ollama_generate_with_temp,

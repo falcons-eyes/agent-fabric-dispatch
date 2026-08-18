@@ -12,7 +12,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agent.confidence import ConfidenceConfig, set_config
-from agent.fabric_agent import decompose_task, run_pipeline
+from agent.agent_fabric import decompose_task, run_pipeline
 
 
 def _mock_ollama_with_decompose(decompose_response, step_answers):
@@ -36,7 +36,7 @@ class TestDecomposeTask:
             {"step": "Add type hints", "type": "refactor"},
             {"step": "Write tests", "type": "test"},
         ])
-        with patch("agent.fabric_agent.ollama_generate",
+        with patch("agent.agent_fabric.ollama_generate",
                     return_value={"result": steps_json, "cost_usd": 0}):
             steps = decompose_task("refactor and test foo.py")
 
@@ -46,7 +46,7 @@ class TestDecomposeTask:
 
     def test_handles_code_block_wrapped_json(self):
         wrapped = '```json\n[{"step": "summarize", "type": "summarize"}]\n```'
-        with patch("agent.fabric_agent.ollama_generate",
+        with patch("agent.agent_fabric.ollama_generate",
                     return_value={"result": wrapped, "cost_usd": 0}):
             steps = decompose_task("summarize everything")
 
@@ -54,7 +54,7 @@ class TestDecomposeTask:
         assert steps[0]["step"] == "summarize"
 
     def test_falls_back_to_single_step_on_bad_json(self):
-        with patch("agent.fabric_agent.ollama_generate",
+        with patch("agent.agent_fabric.ollama_generate",
                     return_value={"result": "I can't parse that", "cost_usd": 0}):
             steps = decompose_task("do something complex")
 
@@ -63,7 +63,7 @@ class TestDecomposeTask:
         assert steps[0]["type"] == "other"
 
     def test_falls_back_on_wrong_structure(self):
-        with patch("agent.fabric_agent.ollama_generate",
+        with patch("agent.agent_fabric.ollama_generate",
                     return_value={"result": '{"not": "a list"}', "cost_usd": 0}):
             steps = decompose_task("test task")
 
@@ -71,7 +71,7 @@ class TestDecomposeTask:
 
     def test_falls_back_on_missing_step_key(self):
         bad = json.dumps([{"description": "no step key", "type": "other"}])
-        with patch("agent.fabric_agent.ollama_generate",
+        with patch("agent.agent_fabric.ollama_generate",
                     return_value={"result": bad, "cost_usd": 0}):
             steps = decompose_task("test task")
 
@@ -87,8 +87,8 @@ class TestRunPipeline:
         single = json.dumps([{"step": "just one thing", "type": "other"}])
         mock = _mock_ollama_with_decompose(single, ["done"])
 
-        with patch("agent.fabric_agent.ollama_generate", mock):
-            with patch("agent.fabric_agent.classify_task", return_value="local"):
+        with patch("agent.agent_fabric.ollama_generate", mock):
+            with patch("agent.agent_fabric.classify_task", return_value="local"):
                 result = run_pipeline("just one thing")
 
         assert "steps" not in result or result.get("source") != "pipeline"
@@ -100,8 +100,8 @@ class TestRunPipeline:
         ])
         mock = _mock_ollama_with_decompose(steps, ["typed code", "test code"])
 
-        with patch("agent.fabric_agent.ollama_generate", mock):
-            with patch("agent.fabric_agent.classify_task", return_value="local"):
+        with patch("agent.agent_fabric.ollama_generate", mock):
+            with patch("agent.agent_fabric.classify_task", return_value="local"):
                 result = run_pipeline("refactor and test foo")
 
         assert result["source"] == "pipeline"
@@ -126,8 +126,8 @@ class TestRunPipeline:
             captured_prompts.append(prompt)
             return {"result": f"step {idx} result", "cost_usd": 0, "source": "local"}
 
-        with patch("agent.fabric_agent.ollama_generate", mock):
-            with patch("agent.fabric_agent.classify_task", return_value="local"):
+        with patch("agent.agent_fabric.ollama_generate", mock):
+            with patch("agent.agent_fabric.classify_task", return_value="local"):
                 run_pipeline("summarize then classify")
 
         assert len(captured_prompts) == 2
@@ -147,8 +147,8 @@ class TestRunPipeline:
                 return {"result": steps, "cost_usd": 0, "source": "local"}
             return {"result": "answer", "cost_usd": 0.0, "source": "local"}
 
-        with patch("agent.fabric_agent.ollama_generate", mock):
-            with patch("agent.fabric_agent.classify_task", return_value="local"):
+        with patch("agent.agent_fabric.ollama_generate", mock):
+            with patch("agent.agent_fabric.classify_task", return_value="local"):
                 result = run_pipeline("multi-step task")
 
         assert result["cost_usd"] == 0.0
@@ -172,8 +172,8 @@ class TestRunPipeline:
             return {"result": "answer", "cost_usd": 0.05, "source": sources[(idx - 1) % 3]}
 
         # Skip confidence by using max trust
-        with patch("agent.fabric_agent.ollama_generate", mock):
-            with patch("agent.fabric_agent.classify_task", return_value="local"):
+        with patch("agent.agent_fabric.ollama_generate", mock):
+            with patch("agent.agent_fabric.classify_task", return_value="local"):
                 result = run_pipeline("complex task")
 
         assert result["total_steps"] == 3

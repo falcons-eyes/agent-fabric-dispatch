@@ -19,6 +19,7 @@ adjusts the confidence thresholds accordingly:
 """
 
 import json
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -72,12 +73,14 @@ class BudgetTracker:
     config: BudgetConfig
     session_spent: float = 0.0
     _daily_log_path: Path = field(default_factory=lambda: Path.home() / ".fabric" / "budget_log.jsonl")
+    _lock: threading.Lock = field(default_factory=threading.Lock)
 
     def record_spend(self, cost_usd: float):
         if cost_usd <= 0:
             return
-        self.session_spent += cost_usd
-        self._append_log(cost_usd)
+        with self._lock:
+            self.session_spent += cost_usd
+            self._append_log(cost_usd)
 
     def remaining_session(self) -> float | None:
         if self.config.session_usd <= 0:

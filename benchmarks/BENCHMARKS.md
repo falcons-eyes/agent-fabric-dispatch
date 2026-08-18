@@ -12,7 +12,7 @@ python benchmarks/runner.py --model qwen3-coder:30b --benchmarks gsm8k --limit 1
 # Run multiple benchmarks
 python benchmarks/runner.py --model qwen3-coder:30b --benchmarks mmlu,gsm8k,truthfulqa --limit 50
 
-# Run fabric-agent comparison (local-first + frontier fallback)
+# Run agent-fabric comparison (local-first + frontier fallback)
 python benchmarks/run_fabric_compare.py --benchmarks gsm8k,math,mmlu --limit 50
 ```
 

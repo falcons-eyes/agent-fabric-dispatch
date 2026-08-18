@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""fabric-agent: Local-first coding agent with frontier escalation.
+"""agent-fabric: Local-first coding agent with frontier escalation.
 
 Architecture (inverted from MCP approach):
   - Ollama (local model) handles all tasks by default — zero frontier cost
@@ -7,9 +7,9 @@ Architecture (inverted from MCP approach):
   - Python script orchestrates routing, no MCP overhead
 
 Usage:
-    python3 agent/fabric_agent.py "summarize router/engine.py"
-    python3 agent/fabric_agent.py --interactive
-    python3 agent/fabric_agent.py --compare "refactor this code: ..."
+    python3 agent/agent_fabric.py "summarize router/engine.py"
+    python3 agent/agent_fabric.py --interactive
+    python3 agent/agent_fabric.py --compare "refactor this code: ..."
 """
 
 import argparse
@@ -490,7 +490,7 @@ def run_interactive():
     if rem is not None:
         budget_info = f"  |  Budget: ${rem:.2f} remaining"
 
-    print("fabric-agent — local-first coding agent")
+    print("agent-fabric — local-first coding agent")
     print(f"  Model: {DEFAULT_MODEL}  |  Trust: {cfg.trust}{budget_info}")
     print(f"  Commands: /frontier  /local  /compare  /pipeline  /vote  /trust  /budget  /cache  /quit")
     print()
@@ -619,7 +619,7 @@ def run_interactive():
 
 
 def main():
-    parser = argparse.ArgumentParser(description="fabric-agent: local-first coding agent")
+    parser = argparse.ArgumentParser(description="agent-fabric: local-first coding agent")
     parser.add_argument("prompt", nargs="?", help="Single-shot prompt (use @file.py to include files)")
     parser.add_argument("--interactive", "-i", action="store_true", help="Interactive REPL mode")
     parser.add_argument("--compare", "-c", action="store_true", help="Run on both local and frontier")

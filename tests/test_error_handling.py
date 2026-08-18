@@ -13,9 +13,9 @@ class TestOllamaDown(unittest.TestCase):
     """Verify graceful behavior when Ollama server is unreachable."""
 
     def test_ollama_generate_returns_error_on_connection_refused(self):
-        from agent.fabric_agent import ollama_generate
+        from agent.agent_fabric import ollama_generate
         with patch.dict(os.environ, {"OLLAMA_HOST": "http://127.0.0.1:1"}):
-            import agent.fabric_agent as af
+            import agent.agent_fabric as af
             old_url = af.OLLAMA_API_URL
             af.OLLAMA_API_URL = "http://127.0.0.1:1"
             try:
@@ -28,7 +28,7 @@ class TestOllamaDown(unittest.TestCase):
                 af.OLLAMA_API_URL = old_url
 
     def test_ollama_chat_returns_error_on_connection_refused(self):
-        from agent import fabric_agent as af
+        from agent import agent_fabric as af
         old_url = af.OLLAMA_API_URL
         af.OLLAMA_API_URL = "http://127.0.0.1:1"
         try:
@@ -39,7 +39,7 @@ class TestOllamaDown(unittest.TestCase):
             af.OLLAMA_API_URL = old_url
 
     def test_run_single_falls_back_to_frontier_on_local_error(self):
-        from agent import fabric_agent as af
+        from agent import agent_fabric as af
 
         original_ollama = af.ollama_generate
         original_frontier = af.frontier_query
@@ -61,7 +61,7 @@ class TestOllamaDown(unittest.TestCase):
             af.frontier_query = original_frontier
 
     def test_run_single_forced_local_does_not_fallback(self):
-        from agent import fabric_agent as af
+        from agent import agent_fabric as af
 
         original_ollama = af.ollama_generate
         af.ollama_generate = lambda prompt, model=None: {
@@ -76,7 +76,7 @@ class TestOllamaDown(unittest.TestCase):
             af.ollama_generate = original_ollama
 
     def test_classify_task_returns_valid_route(self):
-        from agent.fabric_agent import classify_task
+        from agent.agent_fabric import classify_task
         self.assertEqual(classify_task("summarize this code"), "local")
         self.assertEqual(classify_task("debug this function"), "frontier")
         self.assertIn(classify_task("hello world"), ["local", "frontier"])

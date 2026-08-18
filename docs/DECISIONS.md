@@ -43,7 +43,7 @@ Why: ubiquitous on Linux/macOS, scriptable, supports named sessions/windows/pane
 Context: MCP dispatch (hooks redirect tool calls to MCP server) was tested end-to-end.
 Decision: invert the architecture. Ollama is the default; `claude -p` is called as a subprocess only when needed.
 Why: MCP dispatch **increases** cost by 78% due to (1) output token tax — Claude generates tool arguments including full code payloads as output tokens, averaging 2.1x the direct answer cost, and (2) system prompt inflation — CLAUDE.md + MCP tool definitions add ~$0.15/call in input tokens. The inverted approach eliminates both overheads entirely.
-Consequence: MCP server code is retained for potential future integration but is not the primary dispatch path. The `agent/fabric_agent.py` module is the main entry point.
+Consequence: MCP server code is retained for potential future integration but is not the primary dispatch path. The `agent/agent_fabric.py` module is the main entry point.
 
 ## ADR-012 — Pre-flight interception is not possible with Claude Code
 Context: explored intercepting prompts before they reach Claude (ANTHROPIC_BASE_URL override, pre-prompt hooks, third-party CLIs).

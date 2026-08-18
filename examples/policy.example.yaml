@@ -20,6 +20,15 @@ confidence:
 budgets:
   frontier_daily: 5.00     # USD per day — router auto-adjusts trust as budget depletes
   # frontier_session: 1.00 # USD per session (optional, takes precedence if lower)
+
+voting:
+  enabled: false             # Enable multi-model voting for higher confidence
+  models:                    # Models to vote across (requires all pulled in Ollama)
+    - "qwen3-coder:30b"
+    - "gemma4:27b-a4b"
+    - "devstral-small:24b"
+  strategy: majority         # majority, weighted, unanimous
+  min_agreement: 0.67        # Fraction of models that must agree
 workers:
   local:
     endpoint: "http://127.0.0.1:11434"

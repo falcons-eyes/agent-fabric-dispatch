@@ -44,9 +44,11 @@ Rule: **no phase starts until the previous phase's gate number exists.** Numbers
 ### Completed (cont.)
 - **Cost-objective router** — Budget-aware routing with daily/session spend limits. Router auto-adjusts trust level as budget depletes: >75% → base trust, 25-75% → aggressive, <25% → max. Blocks all frontier escalation when budget exhausted.
 
+### Completed (cont.)
+- **Multi-model voting** — `--vote` flag and `/vote` command run the same prompt across multiple Ollama models, pick majority answer. `verify_answer()` asks multiple models to rate an answer 1-5 and takes the median. Configurable in policy.yaml under `voting:`.
+
 ### Remaining
 - Learned pre-inference router: for factual knowledge tasks where self-consistency fails (model is "confidently wrong"). Requires lightweight classifier trained on model uncertainty signals.
-- Verification loops / voting across 3 workers; measure *effective N* (Ringelmann-style), publish "peer-grade task list".
 - KV / context sharing across workers (LMCache); measure TTFT and cost.
 - Session fan-out via Agent SDK / headless, in the user's session context (ToS review runs in parallel).
 - **Interface gate:** only if hooks+MCP UX proves insufficient → evaluate a custom TUI forked from opencode/OpenClaude. Not before.

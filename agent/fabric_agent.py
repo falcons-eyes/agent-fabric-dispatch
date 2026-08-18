@@ -537,6 +537,17 @@ def run_interactive():
             print()
             total_frontier_cost += result["frontier"].get("cost_usd", 0)
             continue
+        elif user_input.startswith("/vote "):
+            from agent.voting import VotingConfig, multi_model_vote
+            user_input = user_input[6:]
+            vcfg = VotingConfig.from_policy()
+            models = vcfg.models or [DEFAULT_MODEL]
+            result = multi_model_vote(expand_prompt(user_input), models)
+            print(f"\n[voted: {result['n_agree']}/{result['n_models']} agree, "
+                  f"conf={result['confidence']}]")
+            print(result["result"])
+            print()
+            continue
         elif user_input.startswith("/pipeline "):
             user_input = user_input[10:]
             result = run_pipeline(user_input)
@@ -584,6 +595,8 @@ def main():
     parser.add_argument("--model", "-m", help=f"Ollama model (default: {DEFAULT_MODEL})")
     parser.add_argument("--trust", "-t",
                         help="Trust level: conservative, balanced, aggressive, max, or 0.0-1.0")
+    parser.add_argument("--vote", nargs="*", metavar="MODEL",
+                        help="Multi-model vote (uses models from policy.yaml, or specify models)")
     args = parser.parse_args()
 
     if args.model:
@@ -619,6 +632,21 @@ def main():
             print(f"\n[pipeline: {result['total_steps']} steps, "
                   f"{result['local_steps']} local / {result['shepherded_steps']} shepherded / "
                   f"{result['frontier_steps']} frontier, ${result['cost_usd']:.4f}]",
+                  file=sys.stderr)
+        return
+
+    if args.vote is not None:
+        from agent.voting import VotingConfig, multi_model_vote
+        if args.vote:
+            models = args.vote
+        else:
+            vcfg = VotingConfig.from_policy()
+            models = vcfg.models or [DEFAULT_MODEL]
+        result = multi_model_vote(expand_prompt(args.prompt), models)
+        print(result["result"])
+        if sys.stderr.isatty():
+            print(f"\n[voted: {result['n_agree']}/{result['n_models']} agree, "
+                  f"conf={result['confidence']}, {result['n_unique']} unique]",
                   file=sys.stderr)
         return
 

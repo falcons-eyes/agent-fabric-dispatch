@@ -73,7 +73,11 @@ class ContextCache:
 
     def invalidate(self, path: str):
         """Remove a file from the cache (e.g., after editing)."""
-        self.files.pop(path, None)
+        try:
+            key = str(Path(path).resolve())
+        except OSError:
+            key = path
+        self.files.pop(key, None)
 
     def clear(self):
         """Clear all cached files."""

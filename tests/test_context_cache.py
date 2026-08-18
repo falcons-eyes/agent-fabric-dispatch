@@ -45,10 +45,11 @@ class TestContextCache:
         path = self._make_temp_file("content")
         cache = ContextCache()
         cache.load_file(path)
-        assert path in cache.files
+        resolved = str(Path(path).resolve())
+        assert resolved in cache.files
 
         cache.invalidate(path)
-        assert path not in cache.files
+        assert resolved not in cache.files
 
     def test_clear(self):
         cache = ContextCache()

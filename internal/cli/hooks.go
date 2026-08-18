@@ -29,7 +29,7 @@ type ClaudeSettings struct {
 
 // HookGroup is a matcher with one or more hook definitions.
 type HookGroup struct {
-	Matcher string    `json:"matcher"`
+	Matcher string    `json:"matcher,omitempty"`
 	Hooks   []HookDef `json:"hooks"`
 }
 

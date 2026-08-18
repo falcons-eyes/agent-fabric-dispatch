@@ -130,22 +130,31 @@ def handle_mcp_request(request: dict) -> dict | None:
 
 
 def _read_mcp_message(stream) -> str | None:
-    """Read one MCP message using Content-Length header framing (LSP-style)."""
+    """Read one MCP message using Content-Length header framing (LSP-style).
+
+    Content-Length counts bytes (per LSP spec). When stream is binary,
+    we read exact bytes then decode. When text (e.g. in tests), we read
+    characters which works for ASCII JSON.
+    """
     content_length = None
     while True:
         header_line = stream.readline()
         if not header_line:
             return None
-        header_line = header_line.strip()
-        if not header_line:
+        header_str = header_line.strip() if isinstance(header_line, str) else header_line.strip().decode("utf-8")
+        if not header_str:
             break
-        if header_line.lower().startswith("content-length:"):
-            content_length = int(header_line.split(":", 1)[1].strip())
+        if header_str.lower().startswith("content-length:"):
+            content_length = int(header_str.split(":", 1)[1].strip())
 
     if content_length is None:
         return None
 
     body = stream.read(content_length)
+    if isinstance(body, bytes):
+        if len(body) < content_length:
+            return None
+        return body.decode("utf-8")
     if len(body) < content_length:
         return None
     return body
@@ -153,19 +162,27 @@ def _read_mcp_message(stream) -> str | None:
 
 def _write_mcp_message(data: dict):
     """Write one MCP message with Content-Length header framing."""
-    body = json.dumps(data)
-    header = f"Content-Length: {len(body.encode('utf-8'))}\r\n\r\n"
-    sys.stdout.write(header + body)
-    sys.stdout.flush()
+    body_bytes = json.dumps(data).encode("utf-8")
+    header = f"Content-Length: {len(body_bytes)}\r\n\r\n"
+    out = getattr(sys.stdout, "buffer", None)
+    if out:
+        out.write(header.encode("utf-8"))
+        out.write(body_bytes)
+        out.flush()
+    else:
+        sys.stdout.write(header + body_bytes.decode("utf-8"))
+        sys.stdout.flush()
 
 
 def run_mcp_server():
     """Run as an MCP stdio server (JSON-RPC 2.0 over stdin/stdout).
 
     Uses Content-Length header framing per the MCP stdio transport spec.
+    Reads from binary stdin to correctly handle byte-counted Content-Length.
     """
+    stdin = getattr(sys.stdin, "buffer", sys.stdin)
     while True:
-        raw = _read_mcp_message(sys.stdin)
+        raw = _read_mcp_message(stdin)
         if raw is None:
             break
 

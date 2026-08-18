@@ -94,8 +94,10 @@ def main():
     sys.exit(0)
 
 
-def _extract_paths(tool_input: dict) -> list[str]:
+def _extract_paths(tool_input) -> list[str]:
     """Extract file paths from tool input."""
+    if not isinstance(tool_input, dict):
+        return []
     paths = []
     if "file_path" in tool_input:
         paths.append(tool_input["file_path"])
@@ -106,7 +108,7 @@ def _extract_paths(tool_input: dict) -> list[str]:
     return paths
 
 
-def _classify_task(tool_name: str, tool_input: dict) -> str:
+def _classify_task(tool_name: str, tool_input) -> str:
     """Classify the task type based on tool name and input."""
     task_map = {
         "refactor": "refactor_bulk",
@@ -121,9 +123,9 @@ def _classify_task(tool_name: str, tool_input: dict) -> str:
     return tool_name
 
 
-def _estimate_tokens(tool_input: dict) -> int:
+def _estimate_tokens(tool_input) -> int:
     """Rough token estimate based on input size."""
-    input_str = json.dumps(tool_input)
+    input_str = json.dumps(tool_input) if isinstance(tool_input, (dict, list)) else str(tool_input)
     # ~4 chars per token as rough estimate
     return len(input_str) // 4
 

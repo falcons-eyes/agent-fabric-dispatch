@@ -10,6 +10,12 @@ should be returned or escalated to the frontier model:
 2. Self-verification (AutoMix-style): ask the model to critique its own answer.
    Models are better at judging answers than generating them.
 
+3. Choice shuffling: for multiple-choice, permute answer order to detect
+   position bias vs real knowledge.
+
+All thresholds are configurable via ConfidenceConfig, which can be loaded
+from ~/.fabric/policy.yaml under the `confidence` key.
+
 References:
   - Self-Consistency (Wang et al., 2022; EMNLP 2024)
   - AutoMix (Aggarwal & Madaan et al., NeurIPS 2024)
@@ -18,13 +24,156 @@ References:
 import random
 import re
 from collections import Counter
+from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 
 
 class Confidence(Enum):
     HIGH = "high"
     MEDIUM = "medium"
     LOW = "low"
+
+
+TRUST_PRESETS = {
+    "conservative": {
+        "n_samples": 5,
+        "temperature": 0.8,
+        "high_threshold": 0.92,
+        "low_threshold": 0.65,
+        "verify_pass_score": 5,
+        "mc_high_threshold": 0.98,
+        "mc_low_threshold": 0.60,
+        "mc_samples": 7,
+    },
+    "balanced": {
+        "n_samples": 3,
+        "temperature": 0.7,
+        "high_threshold": 0.85,
+        "low_threshold": 0.50,
+        "verify_pass_score": 4,
+        "mc_high_threshold": 0.95,
+        "mc_low_threshold": 0.55,
+        "mc_samples": 5,
+    },
+    "aggressive": {
+        "n_samples": 2,
+        "temperature": 0.5,
+        "high_threshold": 0.70,
+        "low_threshold": 0.35,
+        "verify_pass_score": 3,
+        "mc_high_threshold": 0.75,
+        "mc_low_threshold": 0.40,
+        "mc_samples": 3,
+    },
+    "max": {
+        "n_samples": 0,
+        "temperature": 0.0,
+        "high_threshold": 0.0,
+        "low_threshold": 0.0,
+        "verify_pass_score": 1,
+        "mc_high_threshold": 0.0,
+        "mc_low_threshold": 0.0,
+        "mc_samples": 0,
+    },
+}
+
+
+@dataclass
+class ConfidenceConfig:
+    trust: str = "balanced"
+    n_samples: int = 3
+    temperature: float = 0.7
+    high_threshold: float = 0.85
+    low_threshold: float = 0.50
+    verify_pass_score: int = 4
+    mc_high_threshold: float = 0.95
+    mc_low_threshold: float = 0.55
+    mc_samples: int = 5
+
+    @classmethod
+    def from_preset(cls, trust: str) -> "ConfidenceConfig":
+        if trust in TRUST_PRESETS:
+            return cls(trust=trust, **TRUST_PRESETS[trust])
+        try:
+            level = float(trust)
+            return cls._from_float(level)
+        except (ValueError, TypeError):
+            return cls()
+
+    @classmethod
+    def _from_float(cls, level: float) -> "ConfidenceConfig":
+        """Interpolate between conservative (0.0) and aggressive (1.0)."""
+        level = max(0.0, min(1.0, level))
+        if level >= 1.0:
+            return cls.from_preset("max")
+
+        c = TRUST_PRESETS["conservative"]
+        a = TRUST_PRESETS["aggressive"]
+
+        def lerp(key):
+            return c[key] + (a[key] - c[key]) * level
+
+        return cls(
+            trust=str(level),
+            n_samples=max(1, round(lerp("n_samples"))),
+            temperature=round(lerp("temperature"), 2),
+            high_threshold=round(lerp("high_threshold"), 2),
+            low_threshold=round(lerp("low_threshold"), 2),
+            verify_pass_score=max(1, round(lerp("verify_pass_score"))),
+            mc_high_threshold=round(lerp("mc_high_threshold"), 2),
+            mc_low_threshold=round(lerp("mc_low_threshold"), 2),
+            mc_samples=max(1, round(lerp("mc_samples"))),
+        )
+
+    @classmethod
+    def from_policy(cls, policy_path: str = None) -> "ConfidenceConfig":
+        """Load from ~/.fabric/policy.yaml confidence section."""
+        if policy_path is None:
+            policy_path = Path.home() / ".fabric" / "policy.yaml"
+        else:
+            policy_path = Path(policy_path)
+
+        if not policy_path.exists():
+            return cls()
+
+        try:
+            import yaml
+            with open(policy_path) as f:
+                policy = yaml.safe_load(f) or {}
+        except Exception:
+            return cls()
+
+        conf = policy.get("confidence", {})
+        if not conf:
+            return cls()
+
+        trust = conf.get("trust", "balanced")
+        base = cls.from_preset(trust)
+
+        for key in ("n_samples", "temperature", "high_threshold",
+                     "low_threshold", "verify_pass_score",
+                     "mc_high_threshold", "mc_low_threshold", "mc_samples"):
+            if key in conf:
+                setattr(base, key, conf[key])
+
+        return base
+
+    @property
+    def skip_confidence(self) -> bool:
+        return self.trust == "max" or self.n_samples == 0
+
+
+_default_config = ConfidenceConfig()
+
+
+def set_config(config: ConfidenceConfig):
+    global _default_config
+    _default_config = config
+
+
+def get_config() -> ConfidenceConfig:
+    return _default_config
 
 
 SELF_VERIFY_PROMPT = """You just answered a question. Now verify your answer.
@@ -42,15 +191,8 @@ Is your answer correct and complete? Rate your confidence from 1-5:
 
 Reply with ONLY a number 1-5, nothing else."""
 
-HIGH_THRESHOLD = 0.85
-LOW_THRESHOLD = 0.50
-VERIFY_PASS_SCORE = 4
-N_SAMPLES = 3
-SAMPLE_TEMPERATURE = 0.7
-
 
 def normalize_answer(text: str) -> str:
-    """Normalize an answer for comparison: strip whitespace, lowercase, collapse spacing."""
     text = text.strip().lower()
     text = re.sub(r'\s+', ' ', text)
     text = re.sub(r'[^\w\s]', '', text)
@@ -58,11 +200,6 @@ def normalize_answer(text: str) -> str:
 
 
 def extract_core_answer(text: str) -> str:
-    """Extract the core answer from a response, ignoring preamble/explanation.
-
-    For structured answers (code, numbers, categories), extract the payload.
-    For free-form text, normalize and use first 200 chars as fingerprint.
-    """
     text = text.strip()
     if not text:
         return ""
@@ -79,16 +216,10 @@ def extract_core_answer(text: str) -> str:
 
 
 def is_multiple_choice(prompt: str) -> bool:
-    """Detect if a prompt is a multiple-choice question."""
     return bool(re.search(r'\b[A-D]\)', prompt) or re.search(r'\b[A-D]\.\s', prompt))
 
 
 def shuffle_choices(prompt: str, seed: int) -> tuple:
-    """Shuffle multiple-choice options and return (new_prompt, mapping).
-
-    The mapping maps original letters to new positions so we can
-    translate the model's answer back to the original ordering.
-    """
     pattern = r'([A-D])\)\s*(.+?)(?=\n[A-D]\)|\n\n|$)'
     matches = list(re.finditer(pattern, prompt, re.DOTALL))
     if len(matches) < 3:
@@ -119,11 +250,6 @@ def shuffle_choices(prompt: str, seed: int) -> tuple:
     for new_idx, orig_idx in enumerate(indices):
         new_to_original[new_labels[new_idx]] = original_labels[orig_idx]
 
-    new_prompt = prompt
-    for i, match in enumerate(reversed(matches)):
-        new_idx = indices.index(len(matches) - 1 - i)
-        pass
-
     new_choices = ""
     sep = ") " if ")" in prompt else ". "
     for new_idx, orig_idx in enumerate(indices):
@@ -139,12 +265,10 @@ def shuffle_choices(prompt: str, seed: int) -> tuple:
 
 
 def choice_shuffle_consistency(prompt: str, generate_fn,
-                               n: int = N_SAMPLES) -> dict:
-    """For multiple-choice: shuffle answer order and check if model answer stays consistent.
+                               n: int = None) -> dict:
+    cfg = get_config()
+    n = n if n is not None else cfg.mc_samples
 
-    If the model picks the same *content* regardless of ordering, it knows the answer.
-    If it follows position bias, confidence is low.
-    """
     answers_original = []
     raw_results = []
 
@@ -182,19 +306,12 @@ def choice_shuffle_consistency(prompt: str, generate_fn,
     }
 
 
-def self_consistency(prompt: str, generate_fn, n: int = N_SAMPLES,
-                     temperature: float = SAMPLE_TEMPERATURE) -> dict:
-    """Sample the model N times and measure answer agreement.
+def self_consistency(prompt: str, generate_fn, n: int = None,
+                     temperature: float = None) -> dict:
+    cfg = get_config()
+    n = n if n is not None else cfg.n_samples
+    temperature = temperature if temperature is not None else cfg.temperature
 
-    Args:
-        prompt: The original prompt.
-        generate_fn: Callable(prompt, temperature) -> dict with 'result' key.
-        n: Number of samples.
-        temperature: Sampling temperature (>0 for diversity).
-
-    Returns:
-        dict with 'agreement' (0-1), 'answers' (list), 'majority_answer' (str).
-    """
     answers = []
     raw_results = []
 
@@ -223,16 +340,6 @@ def self_consistency(prompt: str, generate_fn, n: int = N_SAMPLES,
 
 
 def self_verify(question: str, answer: str, generate_fn) -> dict:
-    """Ask the model to verify its own answer (AutoMix-style).
-
-    Args:
-        question: The original prompt/question.
-        answer: The model's answer to verify.
-        generate_fn: Callable(prompt, temperature) -> dict with 'result' key.
-
-    Returns:
-        dict with 'score' (1-5), 'raw' (str).
-    """
     verify_prompt = SELF_VERIFY_PROMPT.format(question=question[:500], answer=answer[:1000])
     result = generate_fn(verify_prompt, 0.0)
     raw = result.get("result", "").strip()
@@ -244,22 +351,9 @@ def self_verify(question: str, answer: str, generate_fn) -> dict:
 
 
 def estimate_confidence(prompt: str, initial_result: dict,
-                        generate_fn) -> dict:
-    """Estimate confidence in a local model answer using layered signals.
+                        generate_fn, config: ConfidenceConfig = None) -> dict:
+    cfg = config or get_config()
 
-    Layer 1: If the initial result is empty or an error, confidence is LOW.
-    Layer 2: Self-consistency (N samples). High agreement → HIGH, low → LOW.
-    Layer 3: For borderline cases, self-verification breaks the tie.
-
-    Args:
-        prompt: The original prompt.
-        initial_result: The first generation result dict.
-        generate_fn: Callable(prompt, temperature) -> dict with 'result' key.
-
-    Returns:
-        dict with 'confidence' (Confidence enum), 'agreement', 'verify_score',
-        'best_answer' (str), 'signals' (dict of raw signal data).
-    """
     answer = initial_result.get("result", "")
     if not answer or initial_result.get("error"):
         return {
@@ -270,19 +364,27 @@ def estimate_confidence(prompt: str, initial_result: dict,
             "signals": {"reason": "empty_or_error"},
         }
 
+    if cfg.skip_confidence:
+        return {
+            "confidence": Confidence.HIGH,
+            "agreement": 1.0,
+            "verify_score": None,
+            "best_answer": answer,
+            "signals": {"reason": "trust_max"},
+        }
+
     mc = is_multiple_choice(prompt)
     if mc:
-        sc = choice_shuffle_consistency(prompt, generate_fn, n=5)
+        sc = choice_shuffle_consistency(prompt, generate_fn, n=cfg.mc_samples)
     else:
-        sc = self_consistency(prompt, generate_fn, n=N_SAMPLES, temperature=SAMPLE_TEMPERATURE)
+        sc = self_consistency(prompt, generate_fn, n=cfg.n_samples,
+                              temperature=cfg.temperature)
     agreement = sc["agreement"]
 
     if mc:
-        # MC: use only shuffle agreement (self-verification is unreliable for
-        # knowledge questions — models self-verify wrong answers as correct).
-        if agreement >= 0.95:
+        if agreement >= cfg.mc_high_threshold:
             confidence = Confidence.HIGH
-        elif agreement < 0.55:
+        elif agreement < cfg.mc_low_threshold:
             confidence = Confidence.LOW
         else:
             confidence = Confidence.MEDIUM
@@ -294,8 +396,7 @@ def estimate_confidence(prompt: str, initial_result: dict,
             "signals": {"self_consistency": sc},
         }
 
-    # Non-MC: use self-consistency + self-verification for borderline cases
-    if agreement >= HIGH_THRESHOLD:
+    if agreement >= cfg.high_threshold:
         return {
             "confidence": Confidence.HIGH,
             "agreement": agreement,
@@ -304,7 +405,7 @@ def estimate_confidence(prompt: str, initial_result: dict,
             "signals": {"self_consistency": sc},
         }
 
-    if agreement < LOW_THRESHOLD:
+    if agreement < cfg.low_threshold:
         return {
             "confidence": Confidence.LOW,
             "agreement": agreement,
@@ -315,7 +416,7 @@ def estimate_confidence(prompt: str, initial_result: dict,
 
     sv = self_verify(prompt, sc["majority_answer"] or answer, generate_fn)
 
-    if sv["score"] >= VERIFY_PASS_SCORE:
+    if sv["score"] >= cfg.verify_pass_score:
         confidence = Confidence.HIGH
     elif sv["score"] <= 2:
         confidence = Confidence.LOW

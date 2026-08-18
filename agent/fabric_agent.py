@@ -243,8 +243,10 @@ def run_single(prompt: str, force_route: str = None, use_confidence: bool = True
     When use_confidence is True (default), local results go through a
     self-consistency + self-verification check before being returned.
     Low-confidence answers escalate to frontier automatically.
+
+    Trust level is loaded from ~/.fabric/policy.yaml (confidence.trust key).
     """
-    from agent.confidence import Confidence, estimate_confidence
+    from agent.confidence import Confidence, ConfidenceConfig, estimate_confidence, get_config
 
     expanded = expand_prompt(prompt)
     route = force_route or classify_task(expanded)
@@ -258,10 +260,11 @@ def run_single(prompt: str, force_route: str = None, use_confidence: bool = True
         result["fallback"] = True
         return result
 
-    if not use_confidence or force_route == "local":
+    cfg = get_config()
+    if not use_confidence or force_route == "local" or cfg.skip_confidence:
         return result
 
-    conf = estimate_confidence(expanded, result, ollama_generate_with_temp)
+    conf = estimate_confidence(expanded, result, ollama_generate_with_temp, cfg)
 
     result["confidence"] = conf["confidence"].value
     result["agreement"] = conf["agreement"]
@@ -371,10 +374,18 @@ def main():
     parser.add_argument("--frontier", "-f", action="store_true", help="Force frontier routing")
     parser.add_argument("--local", "-l", action="store_true", help="Force local routing")
     parser.add_argument("--model", "-m", help=f"Ollama model (default: {DEFAULT_MODEL})")
+    parser.add_argument("--trust", "-t",
+                        help="Trust level: conservative, balanced, aggressive, max, or 0.0-1.0")
     args = parser.parse_args()
 
     if args.model:
         set_model(args.model)
+
+    from agent.confidence import ConfidenceConfig, set_config
+    if args.trust:
+        set_config(ConfidenceConfig.from_preset(args.trust))
+    else:
+        set_config(ConfidenceConfig.from_policy())
 
     if args.interactive:
         run_interactive()

@@ -5,6 +5,18 @@ rules:
     route: LOCAL
     fallback: FRONTIER
   - default: FRONTIER
+confidence:
+  # How much to trust the local model's answers.
+  # Presets: conservative, balanced, aggressive, max
+  # Or a float 0.0–1.0 (0=escalate often, 1=never escalate)
+  trust: balanced
+
+  # Fine-tune individual parameters (optional, overrides preset):
+  # samples: 3            # N for self-consistency sampling
+  # temperature: 0.7      # Sampling temperature for diversity
+  # high_threshold: 0.85  # Agreement above this → return local answer
+  # low_threshold: 0.50   # Agreement below this → escalate to frontier
+
 budgets:
   frontier_daily: 500k
 workers:

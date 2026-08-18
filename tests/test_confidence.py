@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agent.confidence import (
     Confidence,
+    ConfidenceConfig,
     choice_shuffle_consistency,
     estimate_confidence,
     extract_core_answer,
@@ -19,6 +20,7 @@ from agent.confidence import (
     normalize_answer,
     self_consistency,
     self_verify,
+    set_config,
     shuffle_choices,
 )
 
@@ -225,6 +227,61 @@ class TestEstimateConfidence:
         gen = make_generate_fn(["correct answer"])
         result = estimate_confidence("test", {"result": "original"}, gen)
         assert result["best_answer"] == "correct answer"
+
+
+class TestConfidenceConfig:
+    def test_default_is_balanced(self):
+        cfg = ConfidenceConfig()
+        assert cfg.trust == "balanced"
+        assert cfg.n_samples == 3
+        assert cfg.high_threshold == 0.85
+
+    def test_preset_conservative(self):
+        cfg = ConfidenceConfig.from_preset("conservative")
+        assert cfg.n_samples == 5
+        assert cfg.high_threshold > 0.90
+
+    def test_preset_aggressive(self):
+        cfg = ConfidenceConfig.from_preset("aggressive")
+        assert cfg.n_samples == 2
+        assert cfg.high_threshold < 0.75
+
+    def test_preset_max_skips(self):
+        cfg = ConfidenceConfig.from_preset("max")
+        assert cfg.skip_confidence is True
+
+    def test_float_interpolation(self):
+        cfg = ConfidenceConfig.from_preset("0.5")
+        assert cfg.n_samples >= 2
+        assert cfg.high_threshold < 0.92
+        assert cfg.high_threshold > 0.70
+
+    def test_float_zero_is_conservative(self):
+        cfg = ConfidenceConfig.from_preset("0.0")
+        c = ConfidenceConfig.from_preset("conservative")
+        assert cfg.high_threshold == c.high_threshold
+
+    def test_float_one_is_max(self):
+        cfg = ConfidenceConfig.from_preset("1.0")
+        assert cfg.skip_confidence is True
+
+    def test_unknown_preset_returns_balanced(self):
+        cfg = ConfidenceConfig.from_preset("unknown")
+        assert cfg.trust == "balanced"
+
+    def test_max_trust_skips_in_estimate(self):
+        cfg = ConfidenceConfig.from_preset("max")
+        gen = make_generate_fn(["anything"])
+        result = estimate_confidence("test", {"result": "answer"}, gen, config=cfg)
+        assert result["confidence"] == Confidence.HIGH
+        assert result["signals"]["reason"] == "trust_max"
+
+    def test_aggressive_lower_bar(self):
+        cfg = ConfidenceConfig.from_preset("aggressive")
+        # 2/3 agreement with aggressive thresholds should be HIGH
+        gen = make_generate_fn(["42", "42", "48"])
+        result = estimate_confidence("test", {"result": "42"}, gen, config=cfg)
+        assert result["confidence"] == Confidence.HIGH
 
 
 if __name__ == "__main__":

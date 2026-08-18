@@ -64,6 +64,23 @@ Local model outputs scored by frontier model (Claude) on a 1-5 scale across 5 co
 
 **Overall: PASS** (2/3 task types above gate). Refactor fails because the local model over-refactors — it adds improvements beyond the instruction (e.g., adding error handling when only asked for type hints). Summarize and classify are production-ready.
 
+### Confidence-Based Routing
+
+Instead of post-hoc answer checking, the agent uses **self-consistency** (sample 3x, measure agreement) and **self-verification** (AutoMix-style) to detect uncertainty *before* returning answers. For multiple-choice, **choice shuffling** detects position bias.
+
+| Benchmark | N | Local | Confidence-Routed | Frontier Calls | Cost |
+|-----------|--:|------:|-------------------:|---------------:|-----:|
+| GSM8K | 30 | 96.7% | **100%** | 6 (20%) | $1.14 |
+
+**High-confidence calibration: 100%** — every answer the system labels as "confident" is correct.
+
+The system uses a layered approach:
+- **High confidence** (≥85% self-consistency): return local answer ($0.00)
+- **Medium** (50–85%): return local, flag as uncertain
+- **Low** (<50%): escalate to frontier (~$0.19)
+
+For reasoning tasks (math, code), self-consistency works well because uncertain models produce different answers across samples. For factual knowledge (MMLU), the model is "confidently wrong" — a known limitation addressed by learned routers in Phase 2.
+
 ### Architecture Comparison
 
 We evaluated three dispatch architectures before settling on the inverted approach:

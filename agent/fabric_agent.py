@@ -208,19 +208,83 @@ def expand_prompt(prompt: str) -> str:
     return re.sub(r'@([\w/.\\-]+\.\w+)', replace_file_ref, prompt)
 
 
-def run_single(prompt: str, force_route: str = None) -> dict:
-    """Run a single task with automatic routing. Falls back to frontier on local error."""
+def ollama_generate_with_temp(prompt: str, temperature: float = 0.0) -> dict:
+    """Wrapper for self-consistency sampling: generate with a specific temperature."""
+    model = DEFAULT_MODEL
+    url = f"{OLLAMA_API_URL}/api/generate"
+    payload = json.dumps({
+        "model": model,
+        "prompt": prompt,
+        "stream": False,
+        "options": {"temperature": temperature},
+    }).encode("utf-8")
+
+    t0 = time.time()
+    req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=300) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            dt = time.time() - t0
+            return {
+                "result": data.get("response", "").strip(),
+                "model": model,
+                "eval_count": data.get("eval_count", 0),
+                "duration_ms": round(dt * 1000),
+                "cost_usd": 0.0,
+                "source": "local",
+            }
+    except (urllib.error.URLError, OSError, TimeoutError) as e:
+        return {"result": "", "cost_usd": 0.0, "source": "local", "error": str(e)}
+
+
+def run_single(prompt: str, force_route: str = None, use_confidence: bool = True) -> dict:
+    """Run a single task with confidence-aware routing.
+
+    When use_confidence is True (default), local results go through a
+    self-consistency + self-verification check before being returned.
+    Low-confidence answers escalate to frontier automatically.
+    """
+    from agent.confidence import Confidence, estimate_confidence
+
     expanded = expand_prompt(prompt)
     route = force_route or classify_task(expanded)
 
-    if route == "local":
-        result = ollama_generate(expanded)
-        if result.get("error") and force_route != "local":
-            result = frontier_query(expanded)
-            result["fallback"] = True
-        return result
-    else:
+    if route == "frontier":
         return frontier_query(expanded)
+
+    result = ollama_generate(expanded)
+    if result.get("error") and force_route != "local":
+        result = frontier_query(expanded)
+        result["fallback"] = True
+        return result
+
+    if not use_confidence or force_route == "local":
+        return result
+
+    conf = estimate_confidence(expanded, result, ollama_generate_with_temp)
+
+    result["confidence"] = conf["confidence"].value
+    result["agreement"] = conf["agreement"]
+    result["verify_score"] = conf.get("verify_score")
+
+    if conf["confidence"] == Confidence.HIGH:
+        if conf["best_answer"]:
+            result["result"] = conf["best_answer"]
+        return result
+
+    if conf["confidence"] == Confidence.LOW:
+        frontier_result = frontier_query(expanded)
+        frontier_result["fallback"] = True
+        frontier_result["fallback_reason"] = "low_confidence"
+        frontier_result["local_agreement"] = conf["agreement"]
+        frontier_result["local_verify_score"] = conf.get("verify_score")
+        return frontier_result
+
+    # MEDIUM confidence: return local but flag uncertainty
+    if conf["best_answer"]:
+        result["result"] = conf["best_answer"]
+    result["uncertain"] = True
+    return result
 
 
 def run_compare(prompt: str) -> dict:

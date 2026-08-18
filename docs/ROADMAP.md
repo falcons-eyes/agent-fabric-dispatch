@@ -41,11 +41,13 @@ Rule: **no phase starts until the previous phase's gate number exists.** Numbers
 ### Completed (cont.)
 - **Step-level routing (TRIM-style)** — `run_pipeline()` decomposes complex tasks into steps, routes each independently through confidence estimation. `--pipeline` CLI flag.
 
+### Completed (cont.)
+- **Cost-objective router** — Budget-aware routing with daily/session spend limits. Router auto-adjusts trust level as budget depletes: >75% → base trust, 25-75% → aggressive, <25% → max. Blocks all frontier escalation when budget exhausted.
+
 ### Remaining
 - Learned pre-inference router: for factual knowledge tasks where self-consistency fails (model is "confidently wrong"). Requires lightweight classifier trained on model uncertainty signals.
 - Verification loops / voting across 3 workers; measure *effective N* (Ringelmann-style), publish "peer-grade task list".
 - KV / context sharing across workers (LMCache); measure TTFT and cost.
-- Cost-objective router v2 (minimize frontier share under quality constraint).
 - Session fan-out via Agent SDK / headless, in the user's session context (ToS review runs in parallel).
 - **Interface gate:** only if hooks+MCP UX proves insufficient → evaluate a custom TUI forked from opencode/OpenClaude. Not before.
 

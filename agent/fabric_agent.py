@@ -238,29 +238,43 @@ def ollama_generate_with_temp(prompt: str, temperature: float = 0.0) -> dict:
 
 
 def run_single(prompt: str, force_route: str = None, use_confidence: bool = True) -> dict:
-    """Run a single task with confidence-aware routing.
+    """Run a single task with confidence-aware, budget-aware routing.
 
-    When use_confidence is True (default), local results go through a
-    self-consistency + self-verification check before being returned.
-    Low-confidence answers escalate to frontier automatically.
-
-    Trust level is loaded from ~/.fabric/policy.yaml (confidence.trust key).
+    Trust level and budget are loaded from ~/.fabric/policy.yaml.
+    When budget is running low, trust automatically shifts toward aggressive/max.
     """
-    from agent.confidence import Confidence, ConfidenceConfig, estimate_confidence, get_config
+    from agent.budget import get_tracker
+    from agent.confidence import Confidence, ConfidenceConfig, estimate_confidence, get_config, set_config
 
+    tracker = get_tracker()
     expanded = expand_prompt(prompt)
     route = force_route or classify_task(expanded)
 
     if route == "frontier":
-        return frontier_query(expanded)
+        if not tracker.can_escalate():
+            result = ollama_generate(expanded)
+            result["budget_blocked"] = True
+            return result
+        fr = frontier_query(expanded)
+        tracker.record_spend(fr.get("cost_usd", 0))
+        return fr
 
     result = ollama_generate(expanded)
     if result.get("error") and force_route != "local":
+        if not tracker.can_escalate():
+            result["budget_blocked"] = True
+            return result
         result = frontier_query(expanded)
         result["fallback"] = True
+        tracker.record_spend(result.get("cost_usd", 0))
         return result
 
     cfg = get_config()
+
+    adjusted_trust = tracker.suggested_trust(cfg.trust)
+    if adjusted_trust != cfg.trust:
+        cfg = ConfidenceConfig.from_preset(adjusted_trust)
+
     if not use_confidence or force_route == "local" or cfg.skip_confidence:
         return result
 
@@ -269,15 +283,24 @@ def run_single(prompt: str, force_route: str = None, use_confidence: bool = True
     result["confidence"] = conf["confidence"].value
     result["agreement"] = conf["agreement"]
     result["verify_score"] = conf.get("verify_score")
+    result["budget_remaining"] = tracker.remaining()
 
     if conf["confidence"] == Confidence.HIGH:
         if conf["best_answer"]:
             result["result"] = conf["best_answer"]
         return result
 
+    if not tracker.can_escalate():
+        if conf["best_answer"]:
+            result["result"] = conf["best_answer"]
+        result["budget_blocked"] = True
+        result["uncertain"] = True
+        return result
+
     if conf["confidence"] == Confidence.MEDIUM:
         guided = _try_shepherding(expanded, conf["best_answer"] or result["result"])
         if guided:
+            tracker.record_spend(guided.get("cost_usd", 0))
             guided["fallback_reason"] = "shepherding"
             guided["local_agreement"] = conf["agreement"]
             return guided
@@ -289,11 +312,13 @@ def run_single(prompt: str, force_route: str = None, use_confidence: bool = True
     # LOW confidence: try shepherding first, fall back to full frontier
     guided = _try_shepherding(expanded, conf["best_answer"] or result["result"])
     if guided:
+        tracker.record_spend(guided.get("cost_usd", 0))
         guided["fallback_reason"] = "shepherding"
         guided["local_agreement"] = conf["agreement"]
         return guided
 
     frontier_result = frontier_query(expanded)
+    tracker.record_spend(frontier_result.get("cost_usd", 0))
     frontier_result["fallback"] = True
     frontier_result["fallback_reason"] = "low_confidence"
     frontier_result["local_agreement"] = conf["agreement"]
@@ -440,15 +465,28 @@ def run_compare(prompt: str) -> dict:
 
 
 def run_interactive():
-    """Interactive REPL — local-first with /frontier escape hatch."""
+    """Interactive REPL with confidence routing and shepherding.
+
+    Commands: /frontier, /local, /compare, /pipeline, /trust, /quit
+    """
+    from agent.budget import get_tracker
+    from agent.confidence import get_config
+
+    cfg = get_config()
+    tracker = get_tracker()
+    budget_info = ""
+    rem = tracker.remaining()
+    if rem is not None:
+        budget_info = f"  |  Budget: ${rem:.2f} remaining"
+
     print("fabric-agent — local-first coding agent")
-    print(f"  Model: {DEFAULT_MODEL}")
-    print(f"  Commands: /frontier <prompt>  /compare <prompt>  /quit")
+    print(f"  Model: {DEFAULT_MODEL}  |  Trust: {cfg.trust}{budget_info}")
+    print(f"  Commands: /frontier  /local  /compare  /pipeline  /trust  /budget  /quit")
     print()
 
-    messages = []
     total_local_tokens = 0
     total_frontier_cost = 0.0
+    total_shepherded = 0
 
     while True:
         try:
@@ -462,14 +500,36 @@ def run_interactive():
         if user_input in ("/quit", "/exit", "/q"):
             break
 
+        if user_input.startswith("/trust "):
+            from agent.confidence import ConfidenceConfig, set_config
+            level = user_input[7:].strip()
+            set_config(ConfidenceConfig.from_preset(level))
+            cfg = get_config()
+            print(f"  Trust: {cfg.trust} (high={cfg.high_threshold}, low={cfg.low_threshold})")
+            continue
+
+        if user_input == "/budget":
+            rem = tracker.remaining()
+            ratio = tracker.budget_ratio()
+            adj = tracker.suggested_trust(cfg.trust)
+            if rem is not None:
+                print(f"  Budget: ${rem:.2f} remaining ({ratio*100:.0f}%)")
+                print(f"  Session spent: ${tracker.session_spent:.4f}")
+                print(f"  Adjusted trust: {adj}")
+            else:
+                print("  No budget configured. Set budgets.frontier_daily in ~/.fabric/policy.yaml")
+            continue
+
         force_route = None
         if user_input.startswith("/frontier "):
             force_route = "frontier"
             user_input = user_input[10:]
+        elif user_input.startswith("/local "):
+            force_route = "local"
+            user_input = user_input[7:]
         elif user_input.startswith("/compare "):
             user_input = user_input[9:]
-            expanded = expand_prompt(user_input)
-            result = run_compare(expanded)
+            result = run_compare(user_input)
             print(f"\n--- LOCAL ({result['local'].get('duration_ms', 0)}ms, free) ---")
             print(result["local"]["result"][:2000])
             print(f"\n--- FRONTIER ({result['frontier'].get('duration_ms', 0)}ms, ${result['frontier'].get('cost_usd', 0):.4f}) ---")
@@ -477,25 +537,39 @@ def run_interactive():
             print()
             total_frontier_cost += result["frontier"].get("cost_usd", 0)
             continue
-
-        expanded = expand_prompt(user_input)
-        route = force_route or classify_task(expanded)
-
-        if route == "frontier":
-            print(f"  [routing: frontier]", flush=True)
-            result = frontier_query(expanded)
+        elif user_input.startswith("/pipeline "):
+            user_input = user_input[10:]
+            result = run_pipeline(user_input)
+            print(f"\n[pipeline: {result['total_steps']} steps, "
+                  f"{result['local_steps']}L/{result['shepherded_steps']}S/{result['frontier_steps']}F, "
+                  f"${result['cost_usd']:.4f}]")
+            print(result["result"])
+            print()
             total_frontier_cost += result.get("cost_usd", 0)
-            tag = f"frontier, ${result.get('cost_usd', 0):.4f}"
-        else:
-            result = ollama_generate(expanded)
-            total_local_tokens += result.get("eval_count", 0)
-            tag = f"local, {result.get('eval_count', 0)} tok"
+            continue
+
+        result = run_single(user_input, force_route)
+
+        source = result.get("source", "unknown")
+        cost = result.get("cost_usd", 0)
+        total_frontier_cost += cost
+        total_local_tokens += result.get("eval_count", 0)
+        if source == "shepherded":
+            total_shepherded += 1
+
+        conf = result.get("confidence", "")
+        conf_tag = f", conf={conf}" if conf else ""
+        tag = f"{source}, ${cost:.4f}{conf_tag}"
 
         print(f"\n[{tag}, {result.get('duration_ms', 0)}ms]")
+        if result.get("hint"):
+            print(f"  hint: {result['hint'][:100]}")
         print(result["result"])
         print()
 
-    print(f"\nSession: {total_local_tokens} local tokens (free), ${total_frontier_cost:.4f} frontier cost")
+    print(f"\nSession: {total_local_tokens} local tokens (free), "
+          f"${total_frontier_cost:.4f} frontier cost, "
+          f"{total_shepherded} shepherded")
 
 
 def main():

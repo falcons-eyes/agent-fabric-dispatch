@@ -18,7 +18,8 @@ confidence:
   # low_threshold: 0.50   # Agreement below this → escalate to frontier
 
 budgets:
-  frontier_daily: 500k
+  frontier_daily: 5.00     # USD per day — router auto-adjusts trust as budget depletes
+  # frontier_session: 1.00 # USD per session (optional, takes precedence if lower)
 workers:
   local:
     endpoint: "http://127.0.0.1:11434"

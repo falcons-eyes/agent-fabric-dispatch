@@ -127,6 +127,7 @@ python benchmarks/run_fabric_compare.py --benchmarks gsm8k,math,mmlu --limit 50
 - **Confidence routing** — Self-consistency + self-verification detect when local answers are uncertain
 - **Shepherding** — When uncertain, ask frontier for a hint (~$0.03) instead of full answer (~$0.19)
 - **Configurable trust** — Preset levels (conservative/balanced/aggressive/max) or 0.0–1.0 float via `--trust` flag or `policy.yaml`
+- **Budget-aware routing** — Set daily/session frontier spend limits; router auto-tightens trust as budget depletes
 - **Step-level routing** — `--pipeline` decomposes complex tasks into steps, routes each independently (TRIM-style)
 - **Frontier fallback** — Automatically escalates to Claude when local model answers incorrectly
 - **Policy engine** — YAML rules decide which files stay local (`LOCAL_ONLY`) vs prefer local (`LOCAL`)
@@ -174,6 +175,13 @@ rules:
     route: LOCAL
     fallback: FRONTIER             # fall back if no worker available
   - default: FRONTIER
+
+confidence:
+  trust: balanced              # conservative, balanced, aggressive, max, or 0.0-1.0
+
+budgets:
+  frontier_daily: 5.00         # USD/day — auto-tightens trust as budget depletes
+  # frontier_session: 1.00     # USD/session (optional)
 
 workers:
   local:

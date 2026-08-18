@@ -58,8 +58,8 @@ def ollama_generate(prompt: str, model: str = None) -> dict:
                 "cost_usd": 0.0,
                 "source": "local",
             }
-    except urllib.error.URLError as e:
-        return {"result": f"Error: {e}", "cost_usd": 0.0, "source": "local", "error": str(e)}
+    except (urllib.error.URLError, OSError, TimeoutError) as e:
+        return {"result": "", "cost_usd": 0.0, "source": "local", "error": str(e)}
 
 
 def ollama_chat(messages: list, model: str = None, tools: list = None) -> dict:
@@ -95,8 +95,8 @@ def ollama_chat(messages: list, model: str = None, tools: list = None) -> dict:
                 "cost_usd": 0.0,
                 "source": "local",
             }
-    except urllib.error.URLError as e:
-        return {"result": f"Error: {e}", "cost_usd": 0.0, "source": "local", "error": str(e)}
+    except (urllib.error.URLError, OSError, TimeoutError) as e:
+        return {"result": "", "cost_usd": 0.0, "source": "local", "error": str(e)}
 
 
 def frontier_query(prompt: str, max_turns: int = 1) -> dict:
@@ -209,12 +209,16 @@ def expand_prompt(prompt: str) -> str:
 
 
 def run_single(prompt: str, force_route: str = None) -> dict:
-    """Run a single task with automatic routing."""
+    """Run a single task with automatic routing. Falls back to frontier on local error."""
     expanded = expand_prompt(prompt)
     route = force_route or classify_task(expanded)
 
     if route == "local":
-        return ollama_generate(expanded)
+        result = ollama_generate(expanded)
+        if result.get("error") and force_route != "local":
+            result = frontier_query(expanded)
+            result["fallback"] = True
+        return result
     else:
         return frontier_query(expanded)
 

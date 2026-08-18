@@ -13,7 +13,7 @@
 
 ---
 
-A policy-driven task router that dispatches coding tasks to local open-weight models via [Ollama](https://ollama.com), saving **84% of frontier API costs** while maintaining **95%+ accuracy** through intelligent fallback.
+A policy-driven task router that dispatches coding tasks to local open-weight models via [Ollama](https://ollama.com), saving **79% of frontier API costs** while maintaining **96% accuracy** through intelligent fallback.
 
 ```
 Prompt ──► Ollama (local, $0.00) ──► correct? ──► done
@@ -29,7 +29,7 @@ Prompt ──► Ollama (local, $0.00) ──► correct? ──► done
 
 ## Benchmark Results
 
-Tested across 255 questions on 5 benchmarks. Local model: `qwen3-coder:30b` via Ollama.
+Tested across 405 questions on 5 benchmarks. Local model: `qwen3-coder:30b` via Ollama.
 
 ### Local-First + Frontier Fallback
 
@@ -37,20 +37,32 @@ Tested across 255 questions on 5 benchmarks. Local model: `qwen3-coder:30b` via 
 |-----------|--:|----------:|-------------:|:-----------:|---------------:|-----:|
 | GSM8K | 100 | 97.0% | **100%** | +3.0% | 3 | $0.58 |
 | MATH | 50 | 86.0% | **88.0%** | +2.0% | 7 | $1.33 |
-| MMLU | 50 | 60.0% | **92.0%** | +32.0% | 20 | $3.70 |
+| MMLU | 200 | 67.5% | **95.0%** | +27.5% | 65 | $12.00 |
 | TruthfulQA | 50 | 82.0% | **100%** | +18.0% | 9 | $1.72 |
 | AIME | 5 | 60.0% | **100%** | +40.0% | 2 | $0.58 |
-| **Total** | **255** | **77.3%** | **95.3%** | **+18.0pp** | **41** | **$7.91** |
+| **Total** | **405** | **78.8%** | **96.0%** | **+17.2pp** | **86** | **$16.21** |
 
 ### Cost Comparison
 
 | Strategy | Accuracy | Cost | Cost/Question |
 |----------|:--------:|-----:|--------------:|
-| Local-only (Ollama) | 77.3% | $0.00 | $0.000 |
-| **Fabric Agent** (local + fallback) | **95.3%** | **$7.91** | **$0.031** |
-| Frontier-only (estimated) | ~97% | ~$48.45 | $0.190 |
+| Local-only (Ollama) | 78.8% | $0.00 | $0.000 |
+| **Fabric Agent** (local + fallback) | **96.0%** | **$16.21** | **$0.040** |
+| Frontier-only (estimated) | ~97% | ~$76.95 | $0.190 |
 
-> **84% cost reduction** vs frontier-only, with 95.3% accuracy.
+> **79% cost reduction** vs frontier-only, with 96.0% accuracy.
+
+### Quality Verification
+
+Local model outputs scored by frontier model (Claude) on a 1-5 scale across 5 code fixtures:
+
+| Task Type | Pass Rate (≥4/5) | Avg Score | Gate (≥85%) |
+|-----------|:----------------:|:---------:|:-----------:|
+| Summarize | 5/5 (100%) | 4.8/5 | **PASS** |
+| Classify | 5/5 (100%) | 5.0/5 | **PASS** |
+| Refactor | 3/5 (60%) | 3.8/5 | FAIL |
+
+**Overall: PASS** (2/3 task types above gate). Refactor fails because the local model over-refactors — it adds improvements beyond the instruction (e.g., adding error handling when only asked for type hints). Summarize and classify are production-ready.
 
 ### Architecture Comparison
 
@@ -60,7 +72,7 @@ We evaluated three dispatch architectures before settling on the inverted approa
 |---|---|---|
 | MCP Dispatch (hooks → MCP tools) | **+78%** (worse) | Tool call output token tax makes it more expensive than doing nothing |
 | Frontier-only | baseline | Full quality, full cost |
-| **Inverted (local-first)** | **-84%** | Zero overhead; frontier only when needed |
+| **Inverted (local-first)** | **-79%** | Zero overhead; frontier only when needed |
 
 <details>
 <summary>Why MCP dispatch failed</summary>

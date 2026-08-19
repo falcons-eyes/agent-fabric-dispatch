@@ -15,14 +15,21 @@ def _default_policy_path() -> Path:
     return Path(os.environ.get("FABRIC_POLICY_PATH", str(Path.home() / ".fabric" / "policy.yaml")))
 
 
+_DEFAULT_RULES = [
+    {"match": {"path": ["secrets/**", "secrets*"]}, "route": "LOCAL_ONLY"},
+    {"match": {"path": [".env", ".env.*", ".env*"]}, "route": "LOCAL_ONLY"},
+    {"default": "FRONTIER"},
+]
+
+
 def load_policy(path: Path | None = None) -> dict:
     """Load the policy YAML file."""
     policy_path = path or _default_policy_path()
     if not policy_path.exists():
-        return {"rules": [{"default": "FRONTIER"}]}
+        return {"rules": _DEFAULT_RULES}
 
     with open(policy_path) as f:
-        return yaml.safe_load(f) or {"rules": [{"default": "FRONTIER"}]}
+        return yaml.safe_load(f) or {"rules": _DEFAULT_RULES}
 
 
 def evaluate_policy(context: dict, policy: dict | None = None) -> dict:
